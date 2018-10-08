@@ -9,6 +9,10 @@ type Int struct {
 	Field int
 }
 
+type IntPtr struct {
+	Field *int
+}
+
 type Float32 struct {
 	Field float32
 }
@@ -41,6 +45,19 @@ func TestUnmarshal(t *testing.T) {
 			t.Error(err)
 		}
 		if s.Field != 1 {
+			t.Error("expected 1")
+		}
+	})
+
+	t.Run("int ptr", func(t *testing.T) {
+		// this test essentially covers pointers to any type that's supported as a value
+		record := []string{"1"}
+		s := new(IntPtr)
+		err := csvtool.Unmarshal(record, s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if *s.Field != 1 {
 			t.Error("expected 1")
 		}
 	})

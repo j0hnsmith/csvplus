@@ -21,6 +21,16 @@ func Unmarshal(record []string, v interface{}) error {
 	}
 	for i := 0; i < s.NumField(); i++ {
 		f := s.Field(i)
+
+		if f.Kind() == reflect.Ptr {
+			// the field is a pointer so we create a new pointer initialised with a zero value
+			val := reflect.New(f.Type().Elem())
+			// set the struct field to the initialised pointer
+			f.Set(val)
+			// and switch f from the field to 'thing' that we actually now want to set
+			f = val.Elem()
+		}
+
 		switch f.Type().String() {
 		case "string":
 			f.SetString(record[i])
