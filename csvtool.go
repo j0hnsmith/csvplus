@@ -6,7 +6,6 @@ import (
 	"strconv"
 )
 
-
 // Unmarshal sets the values from the record to the fields of the struct (v). The fields in record must be in the same
 // order as the fields in the struct, the fields on the struct must be exported.
 func Unmarshal(record []string, v interface{}) error {
@@ -52,12 +51,15 @@ func Unmarshal(record []string, v interface{}) error {
 				return err
 			}
 			f.SetFloat(fval)
+		case "bool":
+			bval, err := strconv.ParseBool(record[i])
+			if err != nil {
+				return err
+			}
+			f.SetBool(bval)
 		default:
 			return fmt.Errorf("unsupported type: %s", f.Type().String())
 		}
 	}
 	return nil
 }
-
-
-

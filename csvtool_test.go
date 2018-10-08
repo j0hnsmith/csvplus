@@ -13,6 +13,10 @@ type IntPtr struct {
 	Field *int
 }
 
+type Bool struct {
+	Field bool
+}
+
 type Float32 struct {
 	Field float32
 }
@@ -71,6 +75,41 @@ func TestUnmarshal(t *testing.T) {
 		}
 		if s.Field != float32(1.0) {
 			t.Error("expected 1.0")
+		}
+	})
+
+	t.Run("bool", func(t *testing.T) {
+		var tests = []struct {
+			Name     string
+			Expected bool
+		}{
+			{
+				"true",
+				true,
+			},
+			{
+				"1",
+				true,
+			},
+			{
+				"f",
+				false,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.Name, func(t *testing.T) {
+				record := []string{tt.Name}
+				s := new(Bool)
+				err := csvtool.Unmarshal(record, s)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if s.Field != tt.Expected {
+					t.Errorf("expected %v", tt.Expected)
+				}
+			})
+
 		}
 	})
 }
