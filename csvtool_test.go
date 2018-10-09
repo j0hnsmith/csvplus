@@ -8,6 +8,10 @@ import (
 	"github.com/j0hnsmith/csvtool"
 )
 
+type String struct {
+	Field string
+}
+
 type Int struct {
 	Field int
 }
@@ -85,6 +89,18 @@ func TestUnmarshal(t *testing.T) {
 		}
 		if s.Field != 1 {
 			t.Error("expected 1")
+		}
+	})
+
+	t.Run("string", func(t *testing.T) {
+		record := []string{"foo"}
+		s := new(String)
+		err := csvtool.Unmarshal(record, s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s.Field != "foo" {
+			t.Error("expected foo")
 		}
 	})
 
