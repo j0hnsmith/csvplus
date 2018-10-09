@@ -1,8 +1,10 @@
 package csvtool_test
 
 import (
-	"github.com/j0hnsmith/csvtool"
 	"testing"
+	"time"
+
+	"github.com/j0hnsmith/csvtool"
 )
 
 type Int struct {
@@ -19,6 +21,22 @@ type Bool struct {
 
 type Float32 struct {
 	Field float32
+}
+
+type DateTimeNano struct {
+	Field time.Time `csvtool:"format:time.RFC3339Nano"`
+}
+
+type DateTimeRFC struct {
+	Field time.Time `csvtool:"format:time.RFC3339"`
+}
+
+type DateTimeFormat struct {
+	Field time.Time `csvtool:"format:2006-01"`
+}
+
+type DateTimeNoTag struct {
+	Field time.Time
 }
 
 func TestUnmarshal(t *testing.T) {
@@ -109,7 +127,60 @@ func TestUnmarshal(t *testing.T) {
 					t.Errorf("expected %v", tt.Expected)
 				}
 			})
-
 		}
+	})
+
+	t.Run("time.Time", func(t *testing.T) {
+		t.Run("RFC3339Nano", func(t *testing.T) {
+			dt := time.Now().UTC()
+			dts := dt.Format(time.RFC3339Nano)
+			record := []string{dts}
+			s := new(DateTimeNano)
+			err := csvtool.Unmarshal(record, s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if s.Field != dt {
+				t.Errorf("expected %v, got %v", dt, s.Field)
+			}
+		})
+		t.Run("RFC3339", func(t *testing.T) {
+			dt := time.Now().UTC()
+			dts := dt.Format(time.RFC3339)
+			record := []string{dts}
+			s := new(DateTimeRFC)
+			err := csvtool.Unmarshal(record, s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			dt1, _ := time.Parse(time.RFC3339, dts)
+			if s.Field != dt1 {
+				t.Errorf("expected %v, got %v", dt1, s.Field)
+			}
+		})
+		t.Run("custom format", func(t *testing.T) {
+			dt := time.Now().UTC()
+			format := "2006-01"
+			dts := dt.Format(format)
+			record := []string{dts}
+			s := new(DateTimeFormat)
+			err := csvtool.Unmarshal(record, s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			dt1, _ := time.Parse(format, dts)
+			if s.Field != dt1 {
+				t.Errorf("expected %v, got %v", dt1, s.Field)
+			}
+		})
+
+		t.Run("no struct tag", func(t *testing.T) {
+			record := []string{"2018-10"}
+			s := new(DateTimeNoTag)
+			err := csvtool.Unmarshal(record, s)
+			if err == nil {
+				t.Error("expected error because time.Time field without a layout in a struct tag")
+			}
+		})
 	})
 }

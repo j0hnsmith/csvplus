@@ -3,7 +3,9 @@ package csvtool
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"strconv"
+	"time"
 )
 
 // Unmarshal sets the values from the record to the fields of the struct (v). The fields in record must be in the same
@@ -57,6 +59,25 @@ func Unmarshal(record []string, v interface{}) error {
 				return err
 			}
 			f.SetBool(bval)
+		case "time.Time":
+			expr := `csvtool:"format:(.+)"`
+			re := regexp.MustCompile(expr)
+			matches := re.FindStringSubmatch(string(s.Type().Field(i).Tag))
+			if len(matches) < 2 {
+				return fmt.Errorf("time.Time fields must have a struct tag that matches the format '%s', with the submatch being a valid time.Parse layout", expr)
+			}
+			format := matches[1]
+			if format == "time.RFC3339" {
+				format = time.RFC3339
+			} else if format == "time.RFC3339Nano" {
+				format = time.RFC3339Nano
+			}
+			d, err := time.Parse(format, record[i])
+			if err != nil {
+				return err
+			}
+			f.Set(reflect.ValueOf(d))
+
 		default:
 			return fmt.Errorf("unsupported type: %s", f.Type().String())
 		}
