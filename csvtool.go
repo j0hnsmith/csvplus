@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strconv"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 // Unmarshal sets the values from the record to the fields of the struct (v). The fields in record must be in the same
@@ -32,31 +34,33 @@ func Unmarshal(record []string, v interface{}) error {
 			f = val.Elem()
 		}
 
+		fieldName := s.Type().Field(i).Name
+
 		switch f.Type().String() {
 		case "string":
 			f.SetString(record[i])
 		case "int":
 			ival, err := strconv.ParseInt(record[i], 10, 0)
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "error processing %s", fieldName)
 			}
 			f.SetInt(ival)
 		case "float64":
 			fval, err := strconv.ParseFloat(record[i], 64)
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "error processing %s", fieldName)
 			}
 			f.SetFloat(fval)
 		case "float32":
 			fval, err := strconv.ParseFloat(record[i], 32)
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "error processing %s", fieldName)
 			}
 			f.SetFloat(fval)
 		case "bool":
 			bval, err := strconv.ParseBool(record[i])
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "error processing %s", fieldName)
 			}
 			f.SetBool(bval)
 		case "time.Time":
@@ -64,7 +68,7 @@ func Unmarshal(record []string, v interface{}) error {
 			re := regexp.MustCompile(expr)
 			matches := re.FindStringSubmatch(string(s.Type().Field(i).Tag))
 			if len(matches) < 2 {
-				return fmt.Errorf("time.Time fields must have a struct tag that matches the format '%s', with the submatch being a valid time.Parse layout", expr)
+				return fmt.Errorf("time.Time fields (%s) must have a struct tag that matches the format '%s', with the submatch being a valid time.Parse layout", fieldName, expr)
 			}
 			format := matches[1]
 			if format == "time.RFC3339" {
@@ -74,12 +78,12 @@ func Unmarshal(record []string, v interface{}) error {
 			}
 			d, err := time.Parse(format, record[i])
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "unable to convert %s using layout %s for field %s", record[i], format, fieldName)
 			}
 			f.Set(reflect.ValueOf(d))
 
 		default:
-			return fmt.Errorf("unsupported type: %s", f.Type().String())
+			return fmt.Errorf("unsupported type for %s: %s", fieldName, f.Type().String())
 		}
 	}
 	return nil
