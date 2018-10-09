@@ -46,25 +46,25 @@ func Unmarshal(record []string, v interface{}) error {
 		case "int":
 			ival, err := strconv.ParseInt(record[i], 10, 0)
 			if err != nil {
-				return errors.Wrapf(err, "error processing %s", fieldName)
+				return errors.Wrapf(err, "unable to convert %s to int in field %s", record[i], fieldName)
 			}
 			f.SetInt(ival)
 		case "float64":
 			fval, err := strconv.ParseFloat(record[i], 64)
 			if err != nil {
-				return errors.Wrapf(err, "error processing %s", fieldName)
+				return errors.Wrapf(err, "unable to convert %s to float64 in field %s", record[i], fieldName)
 			}
 			f.SetFloat(fval)
 		case "float32":
 			fval, err := strconv.ParseFloat(record[i], 32)
 			if err != nil {
-				return errors.Wrapf(err, "error processing %s", fieldName)
+				return errors.Wrapf(err, "unable to convert %s to float32 in field %s", record[i], fieldName)
 			}
 			f.SetFloat(fval)
 		case "bool":
 			bval, err := strconv.ParseBool(record[i])
 			if err != nil {
-				return errors.Wrapf(err, "error processing %s", fieldName)
+				return errors.Wrapf(err, "unable to convert %s to bool in field %s", record[i], fieldName)
 			}
 			f.SetBool(bval)
 		case "time.Time":
@@ -82,7 +82,7 @@ func Unmarshal(record []string, v interface{}) error {
 			}
 			d, err := time.Parse(format, record[i])
 			if err != nil {
-				return errors.Wrapf(err, "unable to convert %s using layout %s for field %s", record[i], format, fieldName)
+				return errors.Wrapf(err, "invalid layout format for field %s", fieldName)
 			}
 			f.Set(reflect.ValueOf(d))
 

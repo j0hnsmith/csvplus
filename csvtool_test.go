@@ -48,6 +48,12 @@ type DateTimeNoTag struct {
 	Field time.Time
 }
 
+type MyString string
+
+type Custom struct {
+	Field MyString
+}
+
 func TestUnmarshal(t *testing.T) {
 
 	t.Run("string pointer fails", func(t *testing.T) {
@@ -92,6 +98,19 @@ func TestUnmarshal(t *testing.T) {
 		}
 	})
 
+	t.Run("unsupported field type", func(t *testing.T) {
+		record := []string{"foo"}
+		s := new(Custom)
+		err := csvtool.Unmarshal(record, s)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		expectedPrefix := "unsupported type for Field: csvtool_test.MyString"
+		if !strings.HasPrefix(err.Error(), expectedPrefix) {
+			t.Errorf("wrong error prefix, expected: '%s', got: %s", expectedPrefix, err.Error())
+		}
+	})
+
 	t.Run("int", func(t *testing.T) {
 		record := []string{"1"}
 		s := new(Int)
@@ -123,6 +142,10 @@ func TestUnmarshal(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
+		expectedPrefix := "unable to convert foo to int in field Field"
+		if !strings.HasPrefix(err.Error(), expectedPrefix) {
+			t.Errorf("wrong error, expected: '%s'", expectedPrefix)
+		}
 	})
 
 	t.Run("int ptr", func(t *testing.T) {
@@ -150,6 +173,19 @@ func TestUnmarshal(t *testing.T) {
 		}
 	})
 
+	t.Run("float32 error", func(t *testing.T) {
+		record := []string{"foo"}
+		s := new(Float32)
+		err := csvtool.Unmarshal(record, s)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		expectedPrefix := "unable to convert foo to float32 in field Field"
+		if !strings.HasPrefix(err.Error(), expectedPrefix) {
+			t.Errorf("wrong error, expected: '%s'", expectedPrefix)
+		}
+	})
+
 	t.Run("float64", func(t *testing.T) {
 		record := []string{"1.0"}
 		s := new(Float64)
@@ -159,6 +195,19 @@ func TestUnmarshal(t *testing.T) {
 		}
 		if s.Field != float64(1.0) {
 			t.Error("expected 1.0")
+		}
+	})
+
+	t.Run("float64 error", func(t *testing.T) {
+		record := []string{"foo"}
+		s := new(Float64)
+		err := csvtool.Unmarshal(record, s)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		expectedPrefix := "unable to convert foo to float64 in field Field"
+		if !strings.HasPrefix(err.Error(), expectedPrefix) {
+			t.Errorf("wrong error, expected: '%s'", expectedPrefix)
 		}
 	})
 
@@ -196,6 +245,19 @@ func TestUnmarshal(t *testing.T) {
 		}
 	})
 
+	t.Run("bool error", func(t *testing.T) {
+		record := []string{"foo"}
+		s := new(Bool)
+		err := csvtool.Unmarshal(record, s)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		expectedPrefix := "unable to convert foo to bool in field Field"
+		if !strings.HasPrefix(err.Error(), expectedPrefix) {
+			t.Errorf("wrong error, expected: '%s'", expectedPrefix)
+		}
+	})
+
 	t.Run("time.Time", func(t *testing.T) {
 		t.Run("RFC3339Nano", func(t *testing.T) {
 			dt := time.Now().UTC()
@@ -210,6 +272,7 @@ func TestUnmarshal(t *testing.T) {
 				t.Errorf("expected %v, got %v", dt, s.Field)
 			}
 		})
+
 		t.Run("RFC3339", func(t *testing.T) {
 			dt := time.Now().UTC()
 			dts := dt.Format(time.RFC3339)
@@ -224,6 +287,7 @@ func TestUnmarshal(t *testing.T) {
 				t.Errorf("expected %v, got %v", dt1, s.Field)
 			}
 		})
+
 		t.Run("custom format", func(t *testing.T) {
 			dt := time.Now().UTC()
 			format := "2006-01"
@@ -246,6 +310,21 @@ func TestUnmarshal(t *testing.T) {
 			err := csvtool.Unmarshal(record, s)
 			if err == nil {
 				t.Error("expected error because time.Time field without a layout in a struct tag")
+			}
+		})
+
+		t.Run("invalid format", func(t *testing.T) {
+			dt := time.Now().UTC()
+			dts := dt.Format("invalid format")
+			record := []string{dts}
+			s := new(DateTimeRFC)
+			err := csvtool.Unmarshal(record, s)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			expectedPrefix := "invalid layout format for field Field"
+			if !strings.HasPrefix(err.Error(), expectedPrefix) {
+				t.Errorf("wrong error prefix, expected: '%s', got: %s", expectedPrefix, err.Error())
 			}
 		})
 	})
