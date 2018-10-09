@@ -104,6 +104,15 @@ func TestUnmarshal(t *testing.T) {
 		}
 	})
 
+	t.Run("int error", func(t *testing.T) {
+		record := []string{"foo"}
+		s := new(Int)
+		err := csvtool.Unmarshal(record, s)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
 	t.Run("int ptr", func(t *testing.T) {
 		// this test essentially covers pointers to any type that's supported as a value
 		record := []string{"1"}
