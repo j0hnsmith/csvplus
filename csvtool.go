@@ -19,7 +19,6 @@ func Unmarshal(record []string, v interface{}) error {
 	}
 	s := rv.Elem()
 	if s.NumField() != len(record) {
-		//return &FieldMismatch{s.NumField(), len(record)}
 		return fmt.Errorf("field number mismatch, %d in record vs %d in struct", len(record), s.NumField(), len(record))
 	}
 	for i := 0; i < s.NumField(); i++ {
