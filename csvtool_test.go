@@ -64,7 +64,7 @@ func TestUnmarshal(t *testing.T) {
 		s := new(Int)
 		err := csvtool.Unmarshal(record, s)
 		if err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
 		if s.Field != 1 {
 			t.Error("expected 1")
@@ -89,7 +89,7 @@ func TestUnmarshal(t *testing.T) {
 		s := new(Float32)
 		err := csvtool.Unmarshal(record, s)
 		if err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
 		if s.Field != float32(1.0) {
 			t.Error("expected 1.0")
