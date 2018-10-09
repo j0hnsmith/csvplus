@@ -80,6 +80,18 @@ func TestUnmarshal(t *testing.T) {
 		}
 	})
 
+	t.Run("empty record", func(t *testing.T) {
+		record := []string{""}
+		s := new(Int)
+		err := csvtool.Unmarshal(record, s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s.Field != 0 {
+			t.Error("expected 0 (empty value)")
+		}
+	})
+
 	t.Run("int", func(t *testing.T) {
 		record := []string{"1"}
 		s := new(Int)
