@@ -24,6 +24,10 @@ type Float32 struct {
 	Field float32
 }
 
+type Float64 struct {
+	Field float64
+}
+
 type DateTimeNano struct {
 	Field time.Time `csvtool:"format:time.RFC3339Nano"`
 }
@@ -105,6 +109,18 @@ func TestUnmarshal(t *testing.T) {
 			t.Fatal(err)
 		}
 		if s.Field != float32(1.0) {
+			t.Error("expected 1.0")
+		}
+	})
+
+	t.Run("float64", func(t *testing.T) {
+		record := []string{"1.0"}
+		s := new(Float64)
+		err := csvtool.Unmarshal(record, s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s.Field != float64(1.0) {
 			t.Error("expected 1.0")
 		}
 	})
