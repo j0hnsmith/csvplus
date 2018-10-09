@@ -23,6 +23,11 @@ func Unmarshal(record []string, v interface{}) error {
 		return fmt.Errorf("field number mismatch, %d in record vs %d in struct", len(record), s.NumField(), len(record))
 	}
 	for i := 0; i < s.NumField(); i++ {
+		if len(record[i]) == 0 {
+			// empty record
+			continue
+		}
+
 		f := s.Field(i)
 
 		if f.Kind() == reflect.Ptr {
