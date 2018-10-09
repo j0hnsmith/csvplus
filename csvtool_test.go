@@ -1,6 +1,7 @@
 package csvtool_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -56,6 +57,18 @@ func TestUnmarshal(t *testing.T) {
 		err := csvtool.Unmarshal(record, a)
 		if err == nil {
 			t.Error("expected error")
+		}
+	})
+
+	t.Run("struct fields length mismatch", func(t *testing.T) {
+		a := Int{Field: 1}
+		record := []string{"1", "2"}
+		err := csvtool.Unmarshal(record, &a)
+		if err == nil {
+			t.Error("expected error")
+		}
+		if !strings.HasPrefix(err.Error(), "field number mismatch") {
+			t.Error("wrong error, expected: 'field number mismatch...'")
 		}
 	})
 
