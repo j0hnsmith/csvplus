@@ -1,6 +1,8 @@
 package csvtool_test
 
 import (
+	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -50,16 +52,27 @@ type DateTimeNoTag struct {
 
 type MyString string
 
+func (m *MyString) UnmarshalCSV(r string) error {
+	if m == nil {
+		return fmt.Errorf("cannot unmarshal into nil pointer")
+	}
+	*m = MyString(r)
+	return nil
+}
+
 type Custom struct {
 	Field MyString
 }
 
-func TestUnmarshal(t *testing.T) {
+type CustomPtr struct {
+	Field *MyString
+}
 
+func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 	t.Run("string pointer fails", func(t *testing.T) {
 		a := "not a pointer to a struct"
 		record := []string{"1"}
-		err := csvtool.Unmarshal(record, &a)
+		err := csvtool.UnmarshalRecord(record, &a)
 		if err == nil {
 			t.Error("expected error")
 		}
@@ -68,7 +81,7 @@ func TestUnmarshal(t *testing.T) {
 	t.Run("struct fails", func(t *testing.T) {
 		a := Int{Field: 1}
 		record := []string{"1"}
-		err := csvtool.Unmarshal(record, a)
+		err := csvtool.UnmarshalRecord(record, a)
 		if err == nil {
 			t.Error("expected error")
 		}
@@ -77,7 +90,7 @@ func TestUnmarshal(t *testing.T) {
 	t.Run("struct fields length mismatch", func(t *testing.T) {
 		a := Int{Field: 1}
 		record := []string{"1", "2"}
-		err := csvtool.Unmarshal(record, &a)
+		err := csvtool.UnmarshalRecord(record, &a)
 		if err == nil {
 			t.Error("expected error")
 		}
@@ -89,7 +102,7 @@ func TestUnmarshal(t *testing.T) {
 	t.Run("empty record", func(t *testing.T) {
 		record := []string{""}
 		s := new(Int)
-		err := csvtool.Unmarshal(record, s)
+		err := csvtool.UnmarshalRecord(record, s)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -98,23 +111,35 @@ func TestUnmarshal(t *testing.T) {
 		}
 	})
 
-	t.Run("unsupported field type", func(t *testing.T) {
-		record := []string{"foo"}
-		s := new(Custom)
-		err := csvtool.Unmarshal(record, s)
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		expectedPrefix := "unsupported type for Field: csvtool_test.MyString"
-		if !strings.HasPrefix(err.Error(), expectedPrefix) {
-			t.Errorf("wrong error prefix, expected: '%s', got: %s", expectedPrefix, err.Error())
-		}
+	t.Run("csvtool.Unmarshaler", func(t *testing.T) {
+		t.Run("string field", func(t *testing.T) {
+			record := []string{"foo"}
+			s := new(Custom)
+			err := csvtool.UnmarshalRecord(record, s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if s.Field != "foo" {
+				t.Error("expected foo")
+			}
+		})
+		t.Run("*string field", func(t *testing.T) {
+			record := []string{"foo"}
+			s := new(CustomPtr)
+			err := csvtool.UnmarshalRecord(record, s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if *s.Field != "foo" {
+				t.Error("expected foo")
+			}
+		})
 	})
 
 	t.Run("int", func(t *testing.T) {
 		record := []string{"1"}
 		s := new(Int)
-		err := csvtool.Unmarshal(record, s)
+		err := csvtool.UnmarshalRecord(record, s)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -126,7 +151,7 @@ func TestUnmarshal(t *testing.T) {
 	t.Run("string", func(t *testing.T) {
 		record := []string{"foo"}
 		s := new(String)
-		err := csvtool.Unmarshal(record, s)
+		err := csvtool.UnmarshalRecord(record, s)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -138,7 +163,7 @@ func TestUnmarshal(t *testing.T) {
 	t.Run("int error", func(t *testing.T) {
 		record := []string{"foo"}
 		s := new(Int)
-		err := csvtool.Unmarshal(record, s)
+		err := csvtool.UnmarshalRecord(record, s)
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -152,7 +177,7 @@ func TestUnmarshal(t *testing.T) {
 		// this test essentially covers pointers to any type that's supported as a value
 		record := []string{"1"}
 		s := new(IntPtr)
-		err := csvtool.Unmarshal(record, s)
+		err := csvtool.UnmarshalRecord(record, s)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -164,7 +189,7 @@ func TestUnmarshal(t *testing.T) {
 	t.Run("float32", func(t *testing.T) {
 		record := []string{"1.0"}
 		s := new(Float32)
-		err := csvtool.Unmarshal(record, s)
+		err := csvtool.UnmarshalRecord(record, s)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -176,7 +201,7 @@ func TestUnmarshal(t *testing.T) {
 	t.Run("float32 error", func(t *testing.T) {
 		record := []string{"foo"}
 		s := new(Float32)
-		err := csvtool.Unmarshal(record, s)
+		err := csvtool.UnmarshalRecord(record, s)
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -189,7 +214,7 @@ func TestUnmarshal(t *testing.T) {
 	t.Run("float64", func(t *testing.T) {
 		record := []string{"1.0"}
 		s := new(Float64)
-		err := csvtool.Unmarshal(record, s)
+		err := csvtool.UnmarshalRecord(record, s)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -201,7 +226,7 @@ func TestUnmarshal(t *testing.T) {
 	t.Run("float64 error", func(t *testing.T) {
 		record := []string{"foo"}
 		s := new(Float64)
-		err := csvtool.Unmarshal(record, s)
+		err := csvtool.UnmarshalRecord(record, s)
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -234,7 +259,7 @@ func TestUnmarshal(t *testing.T) {
 			t.Run(tt.Name, func(t *testing.T) {
 				record := []string{tt.Name}
 				s := new(Bool)
-				err := csvtool.Unmarshal(record, s)
+				err := csvtool.UnmarshalRecord(record, s)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -248,7 +273,7 @@ func TestUnmarshal(t *testing.T) {
 	t.Run("bool error", func(t *testing.T) {
 		record := []string{"foo"}
 		s := new(Bool)
-		err := csvtool.Unmarshal(record, s)
+		err := csvtool.UnmarshalRecord(record, s)
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -264,7 +289,7 @@ func TestUnmarshal(t *testing.T) {
 			dts := dt.Format(time.RFC3339Nano)
 			record := []string{dts}
 			s := new(DateTimeNano)
-			err := csvtool.Unmarshal(record, s)
+			err := csvtool.UnmarshalRecord(record, s)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -278,7 +303,7 @@ func TestUnmarshal(t *testing.T) {
 			dts := dt.Format(time.RFC3339)
 			record := []string{dts}
 			s := new(DateTimeRFC)
-			err := csvtool.Unmarshal(record, s)
+			err := csvtool.UnmarshalRecord(record, s)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -294,7 +319,7 @@ func TestUnmarshal(t *testing.T) {
 			dts := dt.Format(format)
 			record := []string{dts}
 			s := new(DateTimeFormat)
-			err := csvtool.Unmarshal(record, s)
+			err := csvtool.UnmarshalRecord(record, s)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -307,7 +332,7 @@ func TestUnmarshal(t *testing.T) {
 		t.Run("no struct tag", func(t *testing.T) {
 			record := []string{"2018-10"}
 			s := new(DateTimeNoTag)
-			err := csvtool.Unmarshal(record, s)
+			err := csvtool.UnmarshalRecord(record, s)
 			if err == nil {
 				t.Error("expected error because time.Time field without a layout in a struct tag")
 			}
@@ -318,7 +343,7 @@ func TestUnmarshal(t *testing.T) {
 			dts := dt.Format("invalid format")
 			record := []string{dts}
 			s := new(DateTimeRFC)
-			err := csvtool.Unmarshal(record, s)
+			err := csvtool.UnmarshalRecord(record, s)
 			if err == nil {
 				t.Fatal("expected error")
 			}
@@ -327,5 +352,77 @@ func TestUnmarshal(t *testing.T) {
 				t.Errorf("wrong error prefix, expected: '%s', got: %s", expectedPrefix, err.Error())
 			}
 		})
+	})
+}
+
+func TestUnmarshal(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		type Item struct {
+			A string
+			B int
+		}
+		data := []byte("first,second\na,1\nb,2")
+		var items []Item
+		err := csvtool.Unmarshal(data, &items)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if items[0].A != "a" {
+			t.Errorf("expected 'a', got: %s", items[0].A)
+		}
+		if items[0].B != 1 {
+			t.Errorf("expected 1, got: %d", items[0].B)
+		}
+		if items[1].A != "b" {
+			t.Errorf("expected 'b', got: %s", items[1].A)
+		}
+		if items[1].B != 2 {
+			t.Errorf("expected 2, got: %d", items[1].B)
+		}
+	})
+
+	t.Run("slice as value instead of pointer", func(t *testing.T) {
+		type Item struct {
+			A string
+			B int
+		}
+		data := []byte("first,second\na,1\nb,2")
+		var items []Item
+		err := csvtool.Unmarshal(data, items)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		expectedPrefix := "non pointer"
+		if !strings.HasPrefix(err.Error(), expectedPrefix) {
+			t.Errorf("wrong error prefix, expected: '%s', got: %s", expectedPrefix, err.Error())
+		}
+	})
+}
+
+func TestUnmarshalReader(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		type Item struct {
+			A string
+			B int
+		}
+		data := []byte("first,second\na,1\nb,2")
+		buf := bytes.NewBuffer(data)
+		var items []Item
+		err := csvtool.UnmarshalReader(buf, &items)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if items[0].A != "a" {
+			t.Errorf("expected 'a', got: %s", items[0].A)
+		}
+		if items[0].B != 1 {
+			t.Errorf("expected 1, got: %d", items[0].B)
+		}
+		if items[1].A != "b" {
+			t.Errorf("expected 'b', got: %s", items[1].A)
+		}
+		if items[1].B != 2 {
+			t.Errorf("expected 2, got: %d", items[1].B)
+		}
 	})
 }

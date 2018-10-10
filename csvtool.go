@@ -1,7 +1,10 @@
 package csvtool
 
 import (
+	"bytes"
+	"encoding/csv"
 	"fmt"
+	"io"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -10,9 +13,79 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Unmarshal sets the values from the record to the fields of the struct (v). The fields in record must be in the same
-// order as the fields in the struct, the fields on the struct must be exported.
-func Unmarshal(record []string, v interface{}) error {
+// Unmarshal parses the csv encoded data and stores the result in the slice pointed to by v.
+// The number of records in row of the csv data must match the number of exported fields in the struct.
+// For common types (eg int, bool, float64...) a standard conversion from a string is applied. If a type implements
+// the Unmarshaler interface, that will be used to unmarshal the record instead.
+// This function assumes the csv data has a header row (which is skipped), see the Decoder type if your data doesn't
+// have a header row.
+func Unmarshal(data []byte, v interface{}) error {
+	buf := bytes.NewBuffer(data)
+	return NewDecoder(buf, true).Decode(v)
+}
+
+// UnmarshalReader is the same as Unmarshal but takes it's input data from an io.Reader.
+func UnmarshalReader(r io.Reader, v interface{}) error {
+	return NewDecoder(r, true).Decode(v)
+}
+
+// Unmarshaler is the interface implemented by types that can unmarshal a csv record of themselves.
+type Unmarshaler interface {
+	UnmarshalCSV(string) error
+}
+
+// A Decoder reads and decodes CSV records from an input stream.
+type Decoder struct {
+	r            io.Reader
+	HasHeaderRow bool
+	headerPassed bool
+}
+
+// NewDecoder reads and decodes CSV records from r.
+func NewDecoder(r io.Reader, hasHeaderRow bool) *Decoder {
+	return &Decoder{
+		r:            r,
+		HasHeaderRow: hasHeaderRow,
+	}
+}
+
+// Decode reads reads csv recorder into v.
+func (dec *Decoder) Decode(v interface{}) error {
+	if reflect.ValueOf(v).Kind() != reflect.Ptr {
+		return fmt.Errorf("non pointer %s", reflect.ValueOf(v).Type())
+	}
+
+	value := reflect.ValueOf(v).Elem()
+	csvReader := csv.NewReader(dec.r)
+
+	for {
+		record, err := csvReader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return errors.Wrap(err, "error reading csv reader")
+		}
+		if !dec.headerPassed {
+			dec.headerPassed = true
+			continue
+		}
+
+		elem := reflect.New(reflect.TypeOf(v).Elem().Elem())
+
+		if err := UnmarshalRecord(record, elem.Interface()); err != nil {
+			return err
+		}
+
+		value.Set(reflect.Append(value, elem.Elem()))
+	}
+
+	return nil
+}
+
+// UnmarshalRecord sets the values from the record to the fields of the struct (v). The fields in record must be in the
+// same order as the fields in the struct, the fields on the struct must be exported.
+func UnmarshalRecord(record []string, v interface{}) error { // nolint: gocyclo
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Ptr || reflect.ValueOf(v).Elem().Kind() != reflect.Struct {
 		return fmt.Errorf("v must be a pointer to a struct")
@@ -28,6 +101,30 @@ func Unmarshal(record []string, v interface{}) error {
 		}
 
 		f := s.Field(i)
+		fieldName := s.Type().Field(i).Name
+
+		// if field implements csvtool.Unmarshaler use that
+		if f.Type().Implements(csvUnmarshalerType) {
+			p := reflect.New(f.Type().Elem())
+			uc := p.Interface().(Unmarshaler)
+			err := uc.UnmarshalCSV(record[i])
+			if err != nil {
+				return errors.Wrapf(err, "error calling %s.UnmarshalCSV()", fieldName)
+			}
+			f.Set(reflect.ValueOf(uc))
+			continue
+
+		} else if reflect.PtrTo(f.Type()).Implements(csvUnmarshalerType) {
+
+			p := reflect.New(f.Type())
+			uc := p.Interface().(Unmarshaler)
+			err := uc.UnmarshalCSV(record[i])
+			if err != nil {
+				return errors.Wrapf(err, "error calling %s.UnmarshalCSV()", fieldName)
+			}
+			f.Set(reflect.ValueOf(uc).Elem())
+			continue
+		}
 
 		if f.Kind() == reflect.Ptr {
 			// the field is a pointer so we create a new pointer initialised with a zero value
@@ -37,8 +134,6 @@ func Unmarshal(record []string, v interface{}) error {
 			// and switch f from the field to 'thing' that we actually now want to set
 			f = val.Elem()
 		}
-
-		fieldName := s.Type().Field(i).Name
 
 		switch f.Type().String() {
 		case "string":
@@ -90,5 +185,8 @@ func Unmarshal(record []string, v interface{}) error {
 			return fmt.Errorf("unsupported type for %s: %s", fieldName, f.Type().String())
 		}
 	}
+
 	return nil
 }
+
+var csvUnmarshalerType = reflect.TypeOf(new(Unmarshaler)).Elem()
