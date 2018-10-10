@@ -205,7 +205,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		expectedPrefix := "unable to convert foo to float32 in field Field"
+		expectedPrefix := "unable to convert foo to float in field Field"
 		if !strings.HasPrefix(err.Error(), expectedPrefix) {
 			t.Errorf("wrong error, expected: '%s'", expectedPrefix)
 		}
@@ -230,7 +230,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		expectedPrefix := "unable to convert foo to float64 in field Field"
+		expectedPrefix := "unable to convert foo to float in field Field"
 		if !strings.HasPrefix(err.Error(), expectedPrefix) {
 			t.Errorf("wrong error, expected: '%s'", expectedPrefix)
 		}

@@ -135,51 +135,55 @@ func UnmarshalRecord(record []string, v interface{}) error { // nolint: gocyclo
 			f = val.Elem()
 		}
 
-		switch f.Type().String() {
-		case "string":
+		switch f.Kind() {
+		case reflect.String:
 			f.SetString(record[i])
-		case "int":
-			ival, err := strconv.ParseInt(record[i], 10, 0)
-			if err != nil {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			ival, err := strconv.ParseInt(record[i], 10, 64)
+			if err != nil || f.OverflowInt(ival) {
 				return errors.Wrapf(err, "unable to convert %s to int in field %s", record[i], fieldName)
 			}
 			f.SetInt(ival)
-		case "float64":
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			ival, err := strconv.ParseUint(record[i], 10, 64)
+			if err != nil || f.OverflowUint(ival) {
+				return errors.Wrapf(err, "unable to convert %s to uint in field %s", record[i], fieldName)
+			}
+			f.SetUint(ival)
+		case reflect.Float32, reflect.Float64:
 			fval, err := strconv.ParseFloat(record[i], 64)
-			if err != nil {
-				return errors.Wrapf(err, "unable to convert %s to float64 in field %s", record[i], fieldName)
+			if err != nil || f.OverflowFloat(fval) {
+				return errors.Wrapf(err, "unable to convert %s to float in field %s", record[i], fieldName)
 			}
 			f.SetFloat(fval)
-		case "float32":
-			fval, err := strconv.ParseFloat(record[i], 32)
-			if err != nil {
-				return errors.Wrapf(err, "unable to convert %s to float32 in field %s", record[i], fieldName)
-			}
-			f.SetFloat(fval)
-		case "bool":
+		case reflect.Bool:
 			bval, err := strconv.ParseBool(record[i])
 			if err != nil {
 				return errors.Wrapf(err, "unable to convert %s to bool in field %s", record[i], fieldName)
 			}
 			f.SetBool(bval)
-		case "time.Time":
-			expr := `csvtool:"format:(.+)"`
-			re := regexp.MustCompile(expr)
-			matches := re.FindStringSubmatch(string(s.Type().Field(i).Tag))
-			if len(matches) < 2 {
-				return fmt.Errorf("time.Time fields (%s) must have a struct tag that matches the format '%s', with the submatch being a valid time.Parse layout", fieldName, expr)
+		case reflect.Struct:
+			if f.Type().String() == "time.Time" {
+				expr := `csvtool:"format:(.+)"`
+				re := regexp.MustCompile(expr)
+				matches := re.FindStringSubmatch(string(s.Type().Field(i).Tag))
+				if len(matches) < 2 {
+					return fmt.Errorf("time.Time fields (%s) must have a struct tag that matches the format '%s', with the submatch being a valid time.Parse layout", fieldName, expr)
+				}
+				format := matches[1]
+				if format == "time.RFC3339" {
+					format = time.RFC3339
+				} else if format == "time.RFC3339Nano" {
+					format = time.RFC3339Nano
+				}
+				d, err := time.Parse(format, record[i])
+				if err != nil {
+					return errors.Wrapf(err, "invalid layout format for field %s", fieldName)
+				}
+				f.Set(reflect.ValueOf(d))
+				break
 			}
-			format := matches[1]
-			if format == "time.RFC3339" {
-				format = time.RFC3339
-			} else if format == "time.RFC3339Nano" {
-				format = time.RFC3339Nano
-			}
-			d, err := time.Parse(format, record[i])
-			if err != nil {
-				return errors.Wrapf(err, "invalid layout format for field %s", fieldName)
-			}
-			f.Set(reflect.ValueOf(d))
+			fallthrough
 
 		default:
 			return fmt.Errorf("unsupported type for %s: %s", fieldName, f.Type().String())
