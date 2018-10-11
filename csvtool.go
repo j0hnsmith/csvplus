@@ -1,3 +1,5 @@
+// Unmarshal CSV data directly into a list of structs, types are converted to those
+// matching the fields on the struct. Struct fields must be in the same order as the records in the CSV data.
 package csvtool
 
 import (
@@ -34,7 +36,7 @@ type Unmarshaler interface {
 	UnmarshalCSV(string) error
 }
 
-// A Decoder reads and decodes CSV records from an input stream.
+// A Decoder reads and decodes CSV records from an input stream. Useful if your data doesn't have a header row.
 type Decoder struct {
 	r            io.Reader
 	HasHeaderRow bool
@@ -83,8 +85,8 @@ func (dec *Decoder) Decode(v interface{}) error {
 	return nil
 }
 
-// UnmarshalRecord sets the values from the record to the fields of the struct (v). The fields in record must be in the
-// same order as the fields in the struct, the fields on the struct must be exported.
+// UnmarshalRecord sets the values from a single CSV record to the fields of the struct v. The fields in record must be
+// in the same order as the fields in the struct, the fields on the struct must be exported.
 func UnmarshalRecord(record []string, v interface{}) error { // nolint: gocyclo
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Ptr || reflect.ValueOf(v).Elem().Kind() != reflect.Struct {
