@@ -1,4 +1,4 @@
-package csvtool_test
+package csvplus_test
 
 import (
 	"bytes"
@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/j0hnsmith/csvtool"
+	"github.com/j0hnsmith/csvplus"
 )
 
 func ExampleUnmarshal() {
@@ -23,7 +23,7 @@ func ExampleUnmarshal() {
 	data := []byte("first,second,third\na,1,\nb,2,f")
 
 	var items []Item
-	err := csvtool.Unmarshal(data, &items)
+	err := csvplus.Unmarshal(data, &items)
 	if err != nil {
 		panic(err)
 	}
@@ -82,7 +82,7 @@ func ExampleUnmarshaler() {
 	data := []byte("name,agreed\nRob,yes\nRuss,no")
 
 	var items []Item
-	err := csvtool.Unmarshal(data, &items)
+	err := csvplus.Unmarshal(data, &items)
 	if err != nil {
 		panic(err)
 	}
@@ -120,15 +120,15 @@ type Float64 struct {
 }
 
 type DateTimeNano struct {
-	Field time.Time `csvtool:"format:time.RFC3339Nano"`
+	Field time.Time `csvplus:"format:time.RFC3339Nano"`
 }
 
 type DateTimeRFC struct {
-	Field time.Time `csvtool:"format:time.RFC3339"`
+	Field time.Time `csvplus:"format:time.RFC3339"`
 }
 
 type DateTimeFormat struct {
-	Field time.Time `csvtool:"format:2006-01"`
+	Field time.Time `csvplus:"format:2006-01"`
 }
 
 type DateTimeNoTag struct {
@@ -157,7 +157,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 	t.Run("string pointer fails", func(t *testing.T) {
 		a := "not a pointer to a struct"
 		record := []string{"1"}
-		err := csvtool.UnmarshalRecord(record, &a)
+		err := csvplus.UnmarshalRecord(record, &a)
 		if err == nil {
 			t.Error("expected error")
 		}
@@ -166,7 +166,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 	t.Run("struct fails", func(t *testing.T) {
 		a := Int{Field: 1}
 		record := []string{"1"}
-		err := csvtool.UnmarshalRecord(record, a)
+		err := csvplus.UnmarshalRecord(record, a)
 		if err == nil {
 			t.Error("expected error")
 		}
@@ -175,7 +175,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 	t.Run("struct fields length mismatch", func(t *testing.T) {
 		a := Int{Field: 1}
 		record := []string{"1", "2"}
-		err := csvtool.UnmarshalRecord(record, &a)
+		err := csvplus.UnmarshalRecord(record, &a)
 		if err == nil {
 			t.Error("expected error")
 		}
@@ -187,7 +187,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 	t.Run("empty record", func(t *testing.T) {
 		record := []string{""}
 		s := new(Int)
-		err := csvtool.UnmarshalRecord(record, s)
+		err := csvplus.UnmarshalRecord(record, s)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -196,11 +196,11 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 		}
 	})
 
-	t.Run("csvtool.Unmarshaler", func(t *testing.T) {
+	t.Run("csvplus.Unmarshaler", func(t *testing.T) {
 		t.Run("string field", func(t *testing.T) {
 			record := []string{"foo"}
 			s := new(Custom)
-			err := csvtool.UnmarshalRecord(record, s)
+			err := csvplus.UnmarshalRecord(record, s)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -211,7 +211,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 		t.Run("*string field", func(t *testing.T) {
 			record := []string{"foo"}
 			s := new(CustomPtr)
-			err := csvtool.UnmarshalRecord(record, s)
+			err := csvplus.UnmarshalRecord(record, s)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -224,7 +224,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 	t.Run("int", func(t *testing.T) {
 		record := []string{"1"}
 		s := new(Int)
-		err := csvtool.UnmarshalRecord(record, s)
+		err := csvplus.UnmarshalRecord(record, s)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -236,7 +236,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 	t.Run("string", func(t *testing.T) {
 		record := []string{"foo"}
 		s := new(String)
-		err := csvtool.UnmarshalRecord(record, s)
+		err := csvplus.UnmarshalRecord(record, s)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -248,7 +248,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 	t.Run("int error", func(t *testing.T) {
 		record := []string{"foo"}
 		s := new(Int)
-		err := csvtool.UnmarshalRecord(record, s)
+		err := csvplus.UnmarshalRecord(record, s)
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -262,7 +262,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 		// this test essentially covers pointers to any type that's supported as a value
 		record := []string{"1"}
 		s := new(IntPtr)
-		err := csvtool.UnmarshalRecord(record, s)
+		err := csvplus.UnmarshalRecord(record, s)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -274,7 +274,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 	t.Run("float32", func(t *testing.T) {
 		record := []string{"1.0"}
 		s := new(Float32)
-		err := csvtool.UnmarshalRecord(record, s)
+		err := csvplus.UnmarshalRecord(record, s)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -286,7 +286,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 	t.Run("float32 error", func(t *testing.T) {
 		record := []string{"foo"}
 		s := new(Float32)
-		err := csvtool.UnmarshalRecord(record, s)
+		err := csvplus.UnmarshalRecord(record, s)
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -299,7 +299,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 	t.Run("float64", func(t *testing.T) {
 		record := []string{"1.0"}
 		s := new(Float64)
-		err := csvtool.UnmarshalRecord(record, s)
+		err := csvplus.UnmarshalRecord(record, s)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -311,7 +311,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 	t.Run("float64 error", func(t *testing.T) {
 		record := []string{"foo"}
 		s := new(Float64)
-		err := csvtool.UnmarshalRecord(record, s)
+		err := csvplus.UnmarshalRecord(record, s)
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -344,7 +344,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 			t.Run(tt.Name, func(t *testing.T) {
 				record := []string{tt.Name}
 				s := new(Bool)
-				err := csvtool.UnmarshalRecord(record, s)
+				err := csvplus.UnmarshalRecord(record, s)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -358,7 +358,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 	t.Run("bool error", func(t *testing.T) {
 		record := []string{"foo"}
 		s := new(Bool)
-		err := csvtool.UnmarshalRecord(record, s)
+		err := csvplus.UnmarshalRecord(record, s)
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -374,7 +374,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 			dts := dt.Format(time.RFC3339Nano)
 			record := []string{dts}
 			s := new(DateTimeNano)
-			err := csvtool.UnmarshalRecord(record, s)
+			err := csvplus.UnmarshalRecord(record, s)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -388,7 +388,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 			dts := dt.Format(time.RFC3339)
 			record := []string{dts}
 			s := new(DateTimeRFC)
-			err := csvtool.UnmarshalRecord(record, s)
+			err := csvplus.UnmarshalRecord(record, s)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -404,7 +404,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 			dts := dt.Format(format)
 			record := []string{dts}
 			s := new(DateTimeFormat)
-			err := csvtool.UnmarshalRecord(record, s)
+			err := csvplus.UnmarshalRecord(record, s)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -417,7 +417,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 		t.Run("no struct tag", func(t *testing.T) {
 			record := []string{"2018-10"}
 			s := new(DateTimeNoTag)
-			err := csvtool.UnmarshalRecord(record, s)
+			err := csvplus.UnmarshalRecord(record, s)
 			if err == nil {
 				t.Error("expected error because time.Time field without a layout in a struct tag")
 			}
@@ -428,7 +428,7 @@ func TestUnmarshalRecord(t *testing.T) { // nolint: gocyclo
 			dts := dt.Format("invalid format")
 			record := []string{dts}
 			s := new(DateTimeRFC)
-			err := csvtool.UnmarshalRecord(record, s)
+			err := csvplus.UnmarshalRecord(record, s)
 			if err == nil {
 				t.Fatal("expected error")
 			}
@@ -448,7 +448,7 @@ func TestUnmarshal(t *testing.T) {
 		}
 		data := []byte("first,second\na,1\nb,2")
 		var items []Item
-		err := csvtool.Unmarshal(data, &items)
+		err := csvplus.Unmarshal(data, &items)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -473,7 +473,7 @@ func TestUnmarshal(t *testing.T) {
 		}
 		data := []byte("first,second\na,1\nb,2")
 		var items []Item
-		err := csvtool.Unmarshal(data, items)
+		err := csvplus.Unmarshal(data, items)
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -493,7 +493,7 @@ func TestUnmarshalReader(t *testing.T) {
 		data := []byte("first,second\na,1\nb,2")
 		buf := bytes.NewBuffer(data)
 		var items []Item
-		err := csvtool.UnmarshalReader(buf, &items)
+		err := csvplus.UnmarshalReader(buf, &items)
 		if err != nil {
 			t.Fatal(err)
 		}

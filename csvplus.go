@@ -1,6 +1,6 @@
 // Unmarshal CSV data directly into a list of structs, types are converted to those
 // matching the fields on the struct. Struct fields must be in the same order as the records in the CSV data.
-package csvtool
+package csvplus
 
 import (
 	"bytes"
@@ -105,7 +105,7 @@ func UnmarshalRecord(record []string, v interface{}) error { // nolint: gocyclo
 		f := s.Field(i)
 		fieldName := s.Type().Field(i).Name
 
-		// if field implements csvtool.Unmarshaler use that
+		// if field implements csvplus.Unmarshaler use that
 		if f.Type().Implements(csvUnmarshalerType) {
 			p := reflect.New(f.Type().Elem())
 			uc := p.Interface().(Unmarshaler)
@@ -166,7 +166,7 @@ func UnmarshalRecord(record []string, v interface{}) error { // nolint: gocyclo
 			f.SetBool(bval)
 		case reflect.Struct:
 			if f.Type().String() == "time.Time" {
-				expr := `csvtool:"format:(.+)"`
+				expr := `csvplus:"format:(.+)"`
 				re := regexp.MustCompile(expr)
 				matches := re.FindStringSubmatch(string(s.Type().Field(i).Tag))
 				if len(matches) < 2 {
