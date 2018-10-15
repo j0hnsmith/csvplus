@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"regexp"
 	"strconv"
 	"time"
 
@@ -38,71 +37,95 @@ type Unmarshaler interface {
 
 // A Decoder reads and decodes CSV records from an input stream. Useful if your data doesn't have a header row.
 type Decoder struct {
-	r            io.Reader
-	HasHeaderRow bool
-	headerPassed bool
+	HasHeaderRow   bool
+	headerPassed   bool
+	csvReader      *csv.Reader
+	structRegister StructRegister
 }
 
 // NewDecoder reads and decodes CSV records from r.
 func NewDecoder(r io.Reader, hasHeaderRow bool) *Decoder {
 	return &Decoder{
-		r:            r,
-		HasHeaderRow: hasHeaderRow,
+		HasHeaderRow:   hasHeaderRow,
+		structRegister: DefaultStructRegister,
+		csvReader:      csv.NewReader(r),
 	}
+}
+
+func (dec *Decoder) SetStructRegister(sr StructRegister) {
+	dec.structRegister = sr
+}
+
+func (dec *Decoder) SetCSVReader(r *csv.Reader) {
+	dec.csvReader = r
 }
 
 // Decode reads reads csv recorder into v.
 func (dec *Decoder) Decode(v interface{}) error {
-	if reflect.ValueOf(v).Kind() != reflect.Ptr {
-		return fmt.Errorf("non pointer %s", reflect.ValueOf(v).Type())
+	rv := reflect.ValueOf(v)
+	rt := rv.Type()
+	if rv.Kind() != reflect.Ptr {
+		return fmt.Errorf("non pointer %s", rt)
+	}
+	if rv.Elem().Kind() != reflect.Slice {
+		return fmt.Errorf("expected slice to store data in, got %s", rv.Elem().Type())
 	}
 
-	value := reflect.ValueOf(v).Elem()
-	csvReader := csv.NewReader(dec.r)
+	containerValue := rv.Elem()
+	structType := rt.Elem().Elem()
 
 	for {
-		record, err := csvReader.Read()
+		record, err := dec.csvReader.Read()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			return errors.Wrap(err, "error reading csv reader")
 		}
+
 		if !dec.headerPassed {
+			// register struct
+			err := dec.structRegister.Register(structType, dec.HasHeaderRow, record)
+			if err != nil {
+				return err
+			}
 			dec.headerPassed = true
 			continue
 		}
 
-		elem := reflect.New(reflect.TypeOf(v).Elem().Elem())
+		structPZeroValue := reflect.New(structType)
 
-		if err := UnmarshalRecord(record, elem.Interface()); err != nil {
+		if err := dec.unmarshalRecord(record, structPZeroValue.Interface()); err != nil {
 			return err
 		}
 
-		value.Set(reflect.Append(value, elem.Elem()))
+		containerValue.Set(reflect.Append(containerValue, structPZeroValue.Elem()))
 	}
 
 	return nil
 }
 
-// UnmarshalRecord sets the values from a single CSV record to the fields of the struct v. The fields in record must be
+// unmarshalRecord sets the values from a single CSV record to the fields of the struct v. The fields in record must be
 // in the same order as the fields in the struct, the fields on the struct must be exported.
-func UnmarshalRecord(record []string, v interface{}) error { // nolint: gocyclo
+func (dec *Decoder) unmarshalRecord(record []string, v interface{}) error { // nolint: gocyclo
 	rv := reflect.ValueOf(v)
-	if rv.Kind() != reflect.Ptr || reflect.ValueOf(v).Elem().Kind() != reflect.Struct {
-		return fmt.Errorf("v must be a pointer to a struct")
-	}
 	s := rv.Elem()
+	st := s.Type()
 	if s.NumField() != len(record) {
 		return fmt.Errorf("field number mismatch, %d in record vs %d in struct", len(record), s.NumField())
 	}
+
 	for i := 0; i < s.NumField(); i++ {
 		if len(record[i]) == 0 {
 			// empty record
 			continue
 		}
 
-		f := s.Field(i)
+		sfi, err := dec.structRegister.GetStructFieldIndex(dec.HasHeaderRow, st, i)
+		if err != nil {
+			return err
+		}
+		f := s.Field(sfi)
 		fieldName := s.Type().Field(i).Name
 
 		// if field implements csvplus.Unmarshaler use that
@@ -166,13 +189,11 @@ func UnmarshalRecord(record []string, v interface{}) error { // nolint: gocyclo
 			f.SetBool(bval)
 		case reflect.Struct:
 			if f.Type().String() == "time.Time" {
-				expr := `csvplus:"format:(.+)"`
-				re := regexp.MustCompile(expr)
-				matches := re.FindStringSubmatch(string(s.Type().Field(i).Tag))
-				if len(matches) < 2 {
-					return fmt.Errorf("time.Time fields (%s) must have a struct tag that matches the format '%s', with the submatch being a valid time.Parse layout", fieldName, expr)
+				format := s.Type().Field(i).Tag.Get("csvplusFormat")
+
+				if format == "" {
+					format = time.RFC3339
 				}
-				format := matches[1]
 				if format == "time.RFC3339" {
 					format = time.RFC3339
 				} else if format == "time.RFC3339Nano" {
