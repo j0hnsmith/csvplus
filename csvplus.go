@@ -85,10 +85,7 @@ func (dec *Decoder) Decode(v interface{}) error {
 
 		if !dec.headerPassed {
 			// register struct
-			err := dec.structRegister.Register(structType, dec.HasHeaderRow, record)
-			if err != nil {
-				return err
-			}
+			dec.structRegister.Register(structType, record)
 			dec.headerPassed = true
 			continue
 		}
@@ -111,30 +108,28 @@ func (dec *Decoder) unmarshalRecord(record []string, v interface{}) error { // n
 	rv := reflect.ValueOf(v)
 	s := rv.Elem()
 	st := s.Type()
-	if s.NumField() != len(record) {
-		return fmt.Errorf("field number mismatch, %d in record vs %d in struct", len(record), s.NumField())
-	}
 
-	for i := 0; i < s.NumField(); i++ {
-		if len(record[i]) == 0 {
-			// empty record
+	fis := dec.structRegister.Fields[st].fields
+	for _, fi := range fis {
+		if fi.SkipField || fi.ColName == "" {
 			continue
 		}
 
-		sfi, err := dec.structRegister.GetStructFieldIndex(dec.HasHeaderRow, st, i)
-		if err != nil {
-			return err
+		recVal := record[fi.ColIndex]
+		if recVal == "" {
+			// no data to store in field
+			continue
 		}
-		f := s.Field(sfi)
-		fieldName := s.Type().Field(i).Name
+
+		f := s.FieldByName(fi.Name)
 
 		// if field implements csvplus.Unmarshaler use that
 		if f.Type().Implements(csvUnmarshalerType) {
 			p := reflect.New(f.Type().Elem())
 			uc := p.Interface().(Unmarshaler)
-			err := uc.UnmarshalCSV(record[i])
+			err := uc.UnmarshalCSV(recVal)
 			if err != nil {
-				return errors.Wrapf(err, "error calling %s.UnmarshalCSV()", fieldName)
+				return errors.Wrapf(err, "error calling %s.UnmarshalCSV()", fi.Name)
 			}
 			f.Set(reflect.ValueOf(uc))
 			continue
@@ -143,9 +138,9 @@ func (dec *Decoder) unmarshalRecord(record []string, v interface{}) error { // n
 
 			p := reflect.New(f.Type())
 			uc := p.Interface().(Unmarshaler)
-			err := uc.UnmarshalCSV(record[i])
+			err := uc.UnmarshalCSV(recVal)
 			if err != nil {
-				return errors.Wrapf(err, "error calling %s.UnmarshalCSV()", fieldName)
+				return errors.Wrapf(err, "error calling %s.UnmarshalCSV()", fi.Name)
 			}
 			f.Set(reflect.ValueOf(uc).Elem())
 			continue
@@ -162,34 +157,38 @@ func (dec *Decoder) unmarshalRecord(record []string, v interface{}) error { // n
 
 		switch f.Kind() {
 		case reflect.String:
-			f.SetString(record[i])
+			f.SetString(recVal)
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			ival, err := strconv.ParseInt(record[i], 10, 64)
+			ival, err := strconv.ParseInt(recVal, 10, 64)
 			if err != nil || f.OverflowInt(ival) {
-				return errors.Wrapf(err, "unable to convert %s to int in field %s", record[i], fieldName)
+				return errors.Wrapf(err, "unable to convert %s to int in field %s", recVal, fi.Name)
 			}
 			f.SetInt(ival)
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			ival, err := strconv.ParseUint(record[i], 10, 64)
+			ival, err := strconv.ParseUint(recVal, 10, 64)
 			if err != nil || f.OverflowUint(ival) {
-				return errors.Wrapf(err, "unable to convert %s to uint in field %s", record[i], fieldName)
+				return errors.Wrapf(err, "unable to convert %s to uint in field %s", recVal, fi.Name)
 			}
 			f.SetUint(ival)
 		case reflect.Float32, reflect.Float64:
-			fval, err := strconv.ParseFloat(record[i], 64)
+			fval, err := strconv.ParseFloat(recVal, 64)
 			if err != nil || f.OverflowFloat(fval) {
-				return errors.Wrapf(err, "unable to convert %s to float in field %s", record[i], fieldName)
+				return errors.Wrapf(err, "unable to convert %s to float in field %s", recVal, fi.Name)
 			}
 			f.SetFloat(fval)
 		case reflect.Bool:
-			bval, err := strconv.ParseBool(record[i])
+			bval, err := strconv.ParseBool(recVal)
 			if err != nil {
-				return errors.Wrapf(err, "unable to convert %s to bool in field %s", record[i], fieldName)
+				return errors.Wrapf(err, "unable to convert %s to bool in field %s", recVal, fi.Name)
 			}
 			f.SetBool(bval)
 		case reflect.Struct:
 			if f.Type().String() == "time.Time" {
-				format := s.Type().Field(i).Tag.Get("csvplusFormat")
+				sf, found := s.Type().FieldByName(fi.Name)
+				if !found {
+					return errors.Errorf("unable to find struct field '%s'", fi.Name)
+				}
+				format := sf.Tag.Get("csvplusFormat")
 
 				if format == "" {
 					format = time.RFC3339
@@ -199,9 +198,9 @@ func (dec *Decoder) unmarshalRecord(record []string, v interface{}) error { // n
 				} else if format == "time.RFC3339Nano" {
 					format = time.RFC3339Nano
 				}
-				d, err := time.Parse(format, record[i])
+				d, err := time.Parse(format, recVal)
 				if err != nil {
-					return errors.Wrapf(err, "invalid layout format for field %s", fieldName)
+					return errors.Wrapf(err, "invalid layout format for field %s", fi.Name)
 				}
 				f.Set(reflect.ValueOf(d))
 				break
@@ -209,7 +208,7 @@ func (dec *Decoder) unmarshalRecord(record []string, v interface{}) error { // n
 			fallthrough
 
 		default:
-			return fmt.Errorf("unsupported type for %s: %s", fieldName, f.Type().String())
+			return fmt.Errorf("unsupported type for %s: %s", fi.Name, f.Type().String())
 		}
 	}
 

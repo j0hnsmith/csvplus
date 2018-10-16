@@ -131,31 +131,26 @@ func TestUnmarshal(t *testing.T) {
 			}
 		})
 
-		t.Run("struct field not in csv error", func(t *testing.T) {
+		t.Run("struct field not in csv", func(t *testing.T) {
 			type Item struct {
 				First  string
 				Second int
-				Third  bool
+				Third  *bool
 			}
 			data := []byte("First,Second\na,1\nb,2")
 			var items []Item
 			err := csvplus.Unmarshal(data, &items)
-			expectedError := "unable to find column"
-			if !strings.HasPrefix(err.Error(), expectedError) {
-				t.Errorf("wrong error, expected: '%s...', got: %s", expectedError, err.Error())
+			if err != nil {
+				t.Fatal(err)
 			}
-		})
-		t.Run("more fields in csv than struct error", func(t *testing.T) {
-			type Item struct {
-				First  string
-				Second int
+			if len(items) != 2 {
+				t.Errorf("expected len(items) to be 2, got: %d", len(items))
 			}
-			data := []byte("First,Second,Third\na,1,missing\nb,2,missing")
-			var items []Item
-			err := csvplus.Unmarshal(data, &items)
-			expectedError := "field number mismatch"
-			if !strings.HasPrefix(err.Error(), expectedError) {
-				t.Errorf("wrong error, expected: '%s...', got: %s", expectedError, err.Error())
+			if items[0].Third != nil {
+				t.Errorf("expected nil, got: %v", items[0].Third)
+			}
+			if items[1].Third != nil {
+				t.Errorf("expected nil, got: %v", items[0].Third)
 			}
 		})
 	})
@@ -440,6 +435,81 @@ func TestUnmarshal(t *testing.T) {
 			}
 			if items[1].Second != 2 {
 				t.Errorf("expected 2, got: %d", items[1].Second)
+			}
+		})
+
+		t.Run("lowercased field names in data match", func(t *testing.T) {
+			type Item struct {
+				First  string
+				Second int
+			}
+			data := []byte("first,second\na,1\nb,2")
+			var items []Item
+			err := csvplus.Unmarshal(data, &items)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(items) != 2 {
+				t.Errorf("expected len of %d, got: %d", 2, len(items))
+			}
+			if items[0].First != "a" {
+				t.Errorf("expected 'a', got: %s", items[0].First)
+			}
+			if items[0].Second != 1 {
+				t.Errorf("expected 1, got: %d", items[0].Second)
+			}
+			if items[1].First != "b" {
+				t.Errorf("expected 'b', got: %s", items[1].First)
+			}
+			if items[1].Second != 2 {
+				t.Errorf("expected 2, got: %d", items[1].Second)
+			}
+		})
+
+		t.Run("skipped field -", func(t *testing.T) {
+			type Item struct {
+				First  string
+				Second int `csvplus:"-"`
+			}
+			data := []byte("First,Second\na,1\nb,2")
+			var items []Item
+			err := csvplus.Unmarshal(data, &items)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(items) != 2 {
+				t.Errorf("expected len of %d, got: %d", 2, len(items))
+			}
+			if items[0].Second != 0 {
+				t.Errorf("expected 2, got: %d", items[0].Second)
+			}
+			if items[1].Second != 0 {
+				t.Errorf("expected 2, got: %d", items[1].Second)
+			}
+		})
+	})
+
+	t.Run("column naming errors", func(t *testing.T) {
+		t.Run("duplicate col name", func(t *testing.T) {
+			// duplicate name so we don't expect the data to be set in either column
+			type Item struct {
+				First  *int
+				Second *int `csvplus:"First"`
+			}
+			data := []byte("First,Second\na,1\nb,2")
+			var items []Item
+			err := csvplus.Unmarshal(data, &items)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(items) != 2 {
+				t.Errorf("expected len of %d, got: %d", 2, len(items))
+			}
+			if items[0].First != nil {
+				t.Errorf("expected nil, got: %v", items[0].First)
+			}
+			if items[0].Second != nil {
+				t.Errorf("expected 2, got: %d", items[1].First)
 			}
 		})
 	})
