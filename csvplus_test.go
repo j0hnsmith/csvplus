@@ -2,6 +2,7 @@ package csvplus_test
 
 import (
 	"bytes"
+	"encoding/csv"
 	"fmt"
 	"strings"
 	"testing"
@@ -578,4 +579,34 @@ func TestUnmarshalReader(t *testing.T) {
 	if items[1].Second != 2 {
 		t.Errorf("expected 2, got: %d", items[1].Second)
 	}
+}
+
+func ExampleDecoder_SetCSVReader() {
+	type Item struct {
+		Name      string     `csvplus:"name"`
+		Timestamp *time.Time `csvplus:"when" csvplusFormat:"2006-01"`
+	}
+
+	data := []byte("name|when\nRob|1999-11\nRuss|")
+
+	// create a *csv.Reader
+	r := csv.NewReader(bytes.NewReader(data))
+	// modify to get the required functionality, in this case '|' separated fields
+	r.Comma = '|'
+
+	dec := csvplus.NewDecoder(bytes.NewReader(data))
+	// set the csv reader to the custom reader
+	dec.SetCSVReader(r)
+
+	var items []Item
+	err := dec.Decode(&items)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("{%s %s}\n", items[0].Name, items[0].Timestamp)
+	fmt.Printf("{%s %+v}\n", items[1].Name, items[1].Timestamp)
+	// Output:
+	// {Rob 1999-11-01 00:00:00 +0000 UTC}
+	// {Russ <nil>}
 }
