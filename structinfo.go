@@ -26,11 +26,6 @@ func NewStructRegister() StructRegister {
 	return sr
 }
 
-// GetRecordIndicesForType returns the csv column indices that struct fields are mapped to.
-func (sr *StructRegister) GetRecordIndicesForType(st reflect.Type) []int {
-	return sr.Fields[st].headerColIndices
-}
-
 func (sr *StructRegister) Register(st reflect.Type, headers []string) {
 	if sr.exists(st) {
 		return
