@@ -1,7 +1,6 @@
 # CSVPlus
 
-CSVPlus provides marshalling/unmarshalling* of CSV data in to go structs.
-Struct fields must be in the same order as the columns in the CSV data.
+CSVPlus provides marshalling/unmarshalling* of CSV data (with header rows) into go structs.
 
 * marshalling on todo list
 
@@ -12,8 +11,8 @@ Struct fields must be in the same order as the columns in the CSV data.
 ## TODO
 
 * [ ] add support for marshalling
-* [ ] expose `csv.Reader` config
-* [ ] consider using struct tags to map CSV colums to struct fields
+* [x] expose `csv.Reader` config
+* [x] consider using struct tags to map CSV colums to struct fields
 
 ## Examples
 Unmarshal
@@ -64,12 +63,14 @@ func (ynb *YesNoBool) UnmarshalCSV(s string) error {
 }
 
 type Item struct {
-    Name   string
-    Agreed YesNoBool // custom type that implements Unmarshaler
+    Name      string     `csvplus:"name"`
+    Seen      *YesNoBool `csvplus:"seen"`   // custom type that implements Unmarshaler
+    Agreed    YesNoBool  `csvplus:"agreed"` // custom type that implements Unmarshaler
+    Timestamp *time.Time `csvplus:"when" csvplusFormat:"2006-01"`
 }
 
 // The CSV data we want to unmarshal, note the custom format.
-data := []byte("name,agreed\nRob,yes\nRuss,no")
+data := []byte("name,seen,agreed,when\nRob,yes,yes,1999-11\nRuss,,no,")
 
 var items []Item
 err := csvplus.Unmarshal(data, &items)
