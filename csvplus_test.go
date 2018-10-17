@@ -41,26 +41,21 @@ var benchItems interface{}
 func BenchmarkUnmarshal(b *testing.B) {
 
 	type Item struct {
-		First  string     `csvplus:"first"`
-		Second int        `csvplus:"second"`
-		Third  *bool      `csvplus:"third"`
-		Forth  *time.Time `csvplus:"forth" csvplusFormat:"2006-01"`
+		First  string `csvplus:"first"`
+		Second int    `csvplus:"second"`
+		Third  *bool  `csvplus:"third"`
 	}
 
 	// The CSV data we want to unmarshal.
 	// If your data is in a *File (or other io.Reader), use UnmarshalReader().
-	data := []byte("first,second,third,forth\na,1,,2000-01\nb,2,f,")
+	data := []byte("first,second,third\na,1,\nb,2,f")
 
 	var items []Item
-	err := csvplus.Unmarshal(data, &items)
-	if err != nil {
-		panic(err)
-	}
 
 	for n := 0; n < b.N; n++ {
+		items = nil
 		// always record the result of Fib to prevent
 		// the compiler eliminating the function call.
-		var items []Item
 		err := csvplus.Unmarshal(data, &items)
 		if err != nil {
 			panic(err)
@@ -142,7 +137,7 @@ func (m *MyString) UnmarshalCSV(r string) error {
 	return nil
 }
 
-func TestUnmarshal(t *testing.T) {
+func TestUnmarshal(t *testing.T) { // nolint: gocyclo
 	t.Run("general", func(t *testing.T) {
 		t.Run("slice as value instead of pointer", func(t *testing.T) {
 			type Item struct {
@@ -438,7 +433,7 @@ func TestUnmarshal(t *testing.T) {
 			if items[1].Second != 2 {
 				t.Errorf("expected 2, got: %d", items[1].Second)
 			}
-			if *items[1].Third != false {
+			if *items[1].Third {
 				t.Errorf("expected false, got: %v", *items[1].Third)
 			}
 			if items[1].Forth != 1 {

@@ -19,6 +19,7 @@ type StructRegister struct {
 	Fields map[reflect.Type]structInfo
 }
 
+// NewStructRegister provides an initialised StructRegister, will probably be removed in a future version.
 func NewStructRegister() StructRegister {
 	sr := StructRegister{
 		Fields: make(map[reflect.Type]structInfo),
@@ -26,6 +27,28 @@ func NewStructRegister() StructRegister {
 	return sr
 }
 
+func (sr *StructRegister) parseTag(sf reflect.StructField) (string, bool) {
+	tag := sf.Tag.Get("csvplus")
+	var omitempty bool
+	tokens := strings.Split(tag, ",")
+	if len(tokens) > 1 && tokens[1] == "omitempty" {
+		omitempty = true
+	}
+	tag = tokens[0]
+	return tag, omitempty
+}
+
+func (sr *StructRegister) getTimeFormat(sf reflect.StructField) (format string) {
+	if sf.Type.String() == "time.Time" || sf.Type.String() == "*time.Time" {
+		format = sf.Tag.Get("csvplusFormat")
+		if format == "" {
+			format = time.RFC3339
+		}
+	}
+	return format
+}
+
+// Register maps columns in the csv data to struct fields.
 func (sr *StructRegister) Register(st reflect.Type, headers []string) {
 	if sr.exists(st) {
 		return
@@ -49,16 +72,11 @@ func (sr *StructRegister) Register(st reflect.Type, headers []string) {
 			FieldIndex: i,
 		}
 
-		tag := sf.Tag.Get("csvplus")
-		tokens := strings.Split(tag, ",")
-		if len(tokens) > 1 && tokens[1] == "omitempty" {
-			fi.OmitEmpty = true
-		}
-		tag = tokens[0]
+		var tag string
+		tag, fi.OmitEmpty = sr.parseTag(sf)
 
 		switch tag {
 		case "":
-
 			var found bool
 			var colIndex int
 
@@ -92,12 +110,7 @@ func (sr *StructRegister) Register(st reflect.Type, headers []string) {
 			continue
 		}
 
-		if sf.Type.String() == "time.Time" || sf.Type.String() == "*time.Time" {
-			fi.Format = sf.Tag.Get("csvplusFormat")
-			if fi.Format == "" {
-				fi.Format = time.RFC3339
-			}
-		}
+		fi.Format = sr.getTimeFormat(sf)
 
 		fieldCounts[fi.ColName]++
 		ColNameToFieldInfo[fi.ColName] = fi
@@ -139,4 +152,5 @@ type fieldInfo struct {
 	OmitEmpty  bool
 }
 
+// DefaultStructRegister is the default StructRegister instance.
 var DefaultStructRegister = NewStructRegister()

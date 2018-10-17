@@ -1,5 +1,5 @@
-// Unmarshal CSV data directly into a list of structs, types are converted to those
-// matching the fields on the struct.
+// Package csvplus unmarshals CSV data directly into a slice of structs, types are converted to those
+// matching the fields on the struct. Layout strings can be provided via struct tags for time.Time fields.
 package csvplus
 
 import (
@@ -50,10 +50,13 @@ func NewDecoder(r io.Reader) *Decoder {
 	}
 }
 
+// SetStructRegister sets the StructRegister to be used. Originally intended to facilitate testing, this will probably
+// be removed.
 func (dec *Decoder) SetStructRegister(sr StructRegister) {
 	dec.structRegister = sr
 }
 
+// SetCSVReader allows for using a custom csv.Reader with custom config (eg | field separator instead of ,).
 func (dec *Decoder) SetCSVReader(r *csv.Reader) {
 	dec.csvReader = r
 }
