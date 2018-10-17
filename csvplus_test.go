@@ -171,7 +171,7 @@ func TestUnmarshal(t *testing.T) {
 				t.Errorf("expected len of %d, got: %d", 1, len(items))
 			}
 			if items[0].First != 7 {
-				t.Errorf("expected '7', got: %s", items[0].First)
+				t.Errorf("expected '7', got: %d", items[0].First)
 			}
 		})
 
