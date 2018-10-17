@@ -1,5 +1,5 @@
 // Unmarshal CSV data directly into a list of structs, types are converted to those
-// matching the fields on the struct. Struct fields must be in the same order as the records in the CSV data.
+// matching the fields on the struct.
 package csvplus
 
 import (
@@ -22,12 +22,12 @@ import (
 // have a header row.
 func Unmarshal(data []byte, v interface{}) error {
 	buf := bytes.NewBuffer(data)
-	return NewDecoder(buf, true).Decode(v)
+	return NewDecoder(buf).Decode(v)
 }
 
 // UnmarshalReader is the same as Unmarshal but takes it's input data from an io.Reader.
 func UnmarshalReader(r io.Reader, v interface{}) error {
-	return NewDecoder(r, true).Decode(v)
+	return NewDecoder(r).Decode(v)
 }
 
 // Unmarshaler is the interface implemented by types that can unmarshal a csv record of themselves.
@@ -37,16 +37,14 @@ type Unmarshaler interface {
 
 // A Decoder reads and decodes CSV records from an input stream. Useful if your data doesn't have a header row.
 type Decoder struct {
-	HasHeaderRow   bool
 	headerPassed   bool
 	csvReader      *csv.Reader
 	structRegister StructRegister
 }
 
 // NewDecoder reads and decodes CSV records from r.
-func NewDecoder(r io.Reader, hasHeaderRow bool) *Decoder {
+func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{
-		HasHeaderRow:   hasHeaderRow,
 		structRegister: DefaultStructRegister,
 		csvReader:      csv.NewReader(r),
 	}
@@ -102,8 +100,7 @@ func (dec *Decoder) Decode(v interface{}) error {
 	return nil
 }
 
-// unmarshalRecord sets the values from a single CSV record to the fields of the struct v. The fields in record must be
-// in the same order as the fields in the struct, the fields on the struct must be exported.
+// unmarshalRecord sets the values from a single CSV record to the (exported) fields of the struct v.
 func (dec *Decoder) unmarshalRecord(record []string, v interface{}) error { // nolint: gocyclo
 	rv := reflect.ValueOf(v)
 	s := rv.Elem()
