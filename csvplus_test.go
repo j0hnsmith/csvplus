@@ -35,6 +35,41 @@ func ExampleUnmarshal() {
 	// {First:b Second:2 Third:false (dereferenced) Forth:<nil>}
 }
 
+var benchItems interface{}
+
+func BenchmarkUnmarshal(b *testing.B) {
+
+	type Item struct {
+		First  string     `csvplus:"first"`
+		Second int        `csvplus:"second"`
+		Third  *bool      `csvplus:"third"`
+		Forth  *time.Time `csvplus:"forth" csvplusFormat:"2006-01"`
+	}
+
+	// The CSV data we want to unmarshal.
+	// If your data is in a *File (or other io.Reader), use UnmarshalReader().
+	data := []byte("first,second,third,forth\na,1,,2000-01\nb,2,f,")
+
+	var items []Item
+	err := csvplus.Unmarshal(data, &items)
+	if err != nil {
+		panic(err)
+	}
+
+	for n := 0; n < b.N; n++ {
+		// always record the result of Fib to prevent
+		// the compiler eliminating the function call.
+		var items []Item
+		err := csvplus.Unmarshal(data, &items)
+		if err != nil {
+			panic(err)
+		}
+	}
+	// always store the result to a package level variable
+	// so the compiler cannot eliminate the Benchmark itself.
+	benchItems = items
+}
+
 // YesNoBool is an example field that implements Unmarhsaler, it's used in an example.
 type YesNoBool bool
 
