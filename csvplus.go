@@ -39,21 +39,15 @@ type Unmarshaler interface {
 type Decoder struct {
 	headerPassed   bool
 	csvReader      *csv.Reader
-	structRegister StructRegister
+	structRegister structRegister
 }
 
 // NewDecoder reads and decodes CSV records from r.
 func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{
-		structRegister: DefaultStructRegister,
+		structRegister: defaultStructRegister,
 		csvReader:      csv.NewReader(r),
 	}
-}
-
-// SetStructRegister sets the StructRegister to be used. Originally intended to facilitate testing, this will probably
-// be removed.
-func (dec *Decoder) SetStructRegister(sr StructRegister) {
-	dec.structRegister = sr
 }
 
 // SetCSVReader allows for using a custom csv.Reader with custom config (eg | field separator instead of ,).

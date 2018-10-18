@@ -14,20 +14,20 @@ type structInfo struct {
 	headerColIndices []int
 }
 
-// StructRegister is a container for all csv/struct field mappings.
-type StructRegister struct {
+// structRegister is a container for all csv/struct field mappings.
+type structRegister struct {
 	Fields map[reflect.Type]structInfo
 }
 
-// NewStructRegister provides an initialised StructRegister, will probably be removed in a future version.
-func NewStructRegister() StructRegister {
-	sr := StructRegister{
+// newStructRegister provides an initialised structRegister, will probably be removed in a future version.
+func newStructRegister() structRegister {
+	sr := structRegister{
 		Fields: make(map[reflect.Type]structInfo),
 	}
 	return sr
 }
 
-func (sr *StructRegister) parseTag(sf reflect.StructField) (string, bool) {
+func (sr *structRegister) parseTag(sf reflect.StructField) (string, bool) {
 	tag := sf.Tag.Get("csvplus")
 	var omitempty bool
 	tokens := strings.Split(tag, ",")
@@ -38,7 +38,7 @@ func (sr *StructRegister) parseTag(sf reflect.StructField) (string, bool) {
 	return tag, omitempty
 }
 
-func (sr *StructRegister) getTimeFormat(sf reflect.StructField) (format string) {
+func (sr *structRegister) getTimeFormat(sf reflect.StructField) (format string) {
 	if sf.Type.String() == "time.Time" || sf.Type.String() == "*time.Time" {
 		format = sf.Tag.Get("csvplusFormat")
 		if format == "" {
@@ -49,7 +49,7 @@ func (sr *StructRegister) getTimeFormat(sf reflect.StructField) (format string) 
 }
 
 // Register maps columns in the csv data to struct fields.
-func (sr *StructRegister) Register(st reflect.Type, headers []string) {
+func (sr *structRegister) Register(st reflect.Type, headers []string) {
 	if sr.exists(st) {
 		return
 	}
@@ -136,7 +136,7 @@ func (sr *StructRegister) Register(st reflect.Type, headers []string) {
 	}
 }
 
-func (sr *StructRegister) exists(rt reflect.Type) bool {
+func (sr *structRegister) exists(rt reflect.Type) bool {
 	_, found := sr.Fields[rt]
 	return found
 }
@@ -152,5 +152,5 @@ type fieldInfo struct {
 	OmitEmpty  bool
 }
 
-// DefaultStructRegister is the default StructRegister instance.
-var DefaultStructRegister = NewStructRegister()
+// DefaultStructRegister is the default structRegister instance.
+var defaultStructRegister = newStructRegister()
