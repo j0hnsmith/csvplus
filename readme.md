@@ -19,15 +19,15 @@ Unmarshal
 
 ```go
 type Item struct {
-    A string
-    B int
-
-    C *bool
+    First  string     `csvplus:"first"`
+    Second int        `csvplus:"second"`
+    Third  *bool      `csvplus:"third"`
+    Forth  *time.Time `csvplus:"forth" csvplusFormat:"2006-01"`
 }
 
 // The CSV data we want to unmarshal.
 // If your data is in a *File (or other io.Reader), use UnmarshalReader().
-data := []byte("first,second,third\na,1,\nb,2,f")
+data := []byte("first,second,third,forth\na,1,,2000-01\nb,2,f,")
 
 var items []Item
 err := csvplus.Unmarshal(data, &items)
@@ -36,7 +36,10 @@ if err != nil {
 }
 
 fmt.Printf("%+v\n", items[0])
-fmt.Printf("{A:%s B:%d C:%t (dereferenced)}\n", items[1].A, items[1].B, *items[1].C)
+fmt.Printf("{First:%s Second:%d Third:%t (dereferenced) Forth:%s}\n", items[1].First, items[1].Second, *items[1].Third, items[1].Forth)
+// Output:
+// {First:a Second:1 Third:<nil> Forth:2000-01-01 00:00:00 +0000 UTC}
+// {First:b Second:2 Third:false (dereferenced) Forth:<nil>}
 ```
 
 Custom field unmarshalling
@@ -82,24 +85,3 @@ for _, item := range items {
     fmt.Println(item)
 }
 ```
-
-time.Time layout via struct tag
-```go
-type MyStruct struct {
-	Field time.Time `csvplus:"format:time.RFC3339"`
-}
-
-data := []byte("name,dob\nRob,2000-01-01T12:00:00Z\nRuss,2000-01-01T12:00:00Z")
-
-data := []string
-err := csvplus.Unmarshal(record, s)
-if err != nil {
-    t.Fatal(err)
-}
-
-for _, item := range items {
-    fmt.Println(item)
-}
-```
- 
-
