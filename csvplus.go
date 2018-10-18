@@ -1,5 +1,5 @@
-// Unmarshal CSV data directly into a list of structs, types are converted to those
-// matching the fields on the struct. Struct fields must be in the same order as the records in the CSV data.
+// Package csvplus unmarshals CSV data directly into a slice of structs, types are converted to those
+// matching the fields on the struct. Layout strings can be provided via struct tags for time.Time fields.
 package csvplus
 
 import (
@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"regexp"
 	"strconv"
 	"time"
 
@@ -23,12 +22,12 @@ import (
 // have a header row.
 func Unmarshal(data []byte, v interface{}) error {
 	buf := bytes.NewBuffer(data)
-	return NewDecoder(buf, true).Decode(v)
+	return NewDecoder(buf).Decode(v)
 }
 
 // UnmarshalReader is the same as Unmarshal but takes it's input data from an io.Reader.
 func UnmarshalReader(r io.Reader, v interface{}) error {
-	return NewDecoder(r, true).Decode(v)
+	return NewDecoder(r).Decode(v)
 }
 
 // Unmarshaler is the interface implemented by types that can unmarshal a csv record of themselves.
@@ -38,80 +37,93 @@ type Unmarshaler interface {
 
 // A Decoder reads and decodes CSV records from an input stream. Useful if your data doesn't have a header row.
 type Decoder struct {
-	r            io.Reader
-	HasHeaderRow bool
-	headerPassed bool
+	headerPassed   bool
+	csvReader      *csv.Reader
+	structRegister structRegister
 }
 
 // NewDecoder reads and decodes CSV records from r.
-func NewDecoder(r io.Reader, hasHeaderRow bool) *Decoder {
+func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{
-		r:            r,
-		HasHeaderRow: hasHeaderRow,
+		structRegister: defaultStructRegister,
+		csvReader:      csv.NewReader(r),
 	}
+}
+
+// SetCSVReader allows for using a custom csv.Reader with custom config (eg | field separator instead of ,).
+func (dec *Decoder) SetCSVReader(r *csv.Reader) {
+	dec.csvReader = r
 }
 
 // Decode reads reads csv recorder into v.
 func (dec *Decoder) Decode(v interface{}) error {
-	if reflect.ValueOf(v).Kind() != reflect.Ptr {
-		return fmt.Errorf("non pointer %s", reflect.ValueOf(v).Type())
+	rv := reflect.ValueOf(v)
+	rt := rv.Type()
+	if rv.Kind() != reflect.Ptr {
+		return fmt.Errorf("non pointer %s", rt)
+	}
+	if rv.Elem().Kind() != reflect.Slice {
+		return fmt.Errorf("expected slice to store data in, got %s", rv.Elem().Type())
 	}
 
-	value := reflect.ValueOf(v).Elem()
-	csvReader := csv.NewReader(dec.r)
+	containerValue := rv.Elem()
+	structType := rt.Elem().Elem()
 
 	for {
-		record, err := csvReader.Read()
+		record, err := dec.csvReader.Read()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			return errors.Wrap(err, "error reading csv reader")
 		}
+
 		if !dec.headerPassed {
+			// register struct
+			dec.structRegister.Register(structType, record)
 			dec.headerPassed = true
 			continue
 		}
 
-		elem := reflect.New(reflect.TypeOf(v).Elem().Elem())
+		structPZeroValue := reflect.New(structType)
 
-		if err := UnmarshalRecord(record, elem.Interface()); err != nil {
+		if err := dec.unmarshalRecord(record, structPZeroValue.Interface()); err != nil {
 			return err
 		}
 
-		value.Set(reflect.Append(value, elem.Elem()))
+		containerValue.Set(reflect.Append(containerValue, structPZeroValue.Elem()))
 	}
 
 	return nil
 }
 
-// UnmarshalRecord sets the values from a single CSV record to the fields of the struct v. The fields in record must be
-// in the same order as the fields in the struct, the fields on the struct must be exported.
-func UnmarshalRecord(record []string, v interface{}) error { // nolint: gocyclo
+// unmarshalRecord sets the values from a single CSV record to the (exported) fields of the struct v.
+func (dec *Decoder) unmarshalRecord(record []string, v interface{}) error { // nolint: gocyclo
 	rv := reflect.ValueOf(v)
-	if rv.Kind() != reflect.Ptr || reflect.ValueOf(v).Elem().Kind() != reflect.Struct {
-		return fmt.Errorf("v must be a pointer to a struct")
-	}
 	s := rv.Elem()
-	if s.NumField() != len(record) {
-		return fmt.Errorf("field number mismatch, %d in record vs %d in struct", len(record), s.NumField())
-	}
-	for i := 0; i < s.NumField(); i++ {
-		if len(record[i]) == 0 {
-			// empty record
+	st := s.Type()
+
+	fis := dec.structRegister.Fields[st].fields
+	for _, fi := range fis {
+		if fi.SkipField || fi.ColName == "" {
 			continue
 		}
 
-		f := s.Field(i)
-		fieldName := s.Type().Field(i).Name
+		recVal := record[fi.ColIndex]
+		if recVal == "" {
+			// no data to store in field
+			continue
+		}
+
+		f := s.FieldByName(fi.Name)
 
 		// if field implements csvplus.Unmarshaler use that
 		if f.Type().Implements(csvUnmarshalerType) {
 			p := reflect.New(f.Type().Elem())
 			uc := p.Interface().(Unmarshaler)
-			err := uc.UnmarshalCSV(record[i])
+			err := uc.UnmarshalCSV(recVal)
 			if err != nil {
-				return errors.Wrapf(err, "error calling %s.UnmarshalCSV()", fieldName)
+				return errors.Wrapf(err, "error calling %s.UnmarshalCSV()", fi.Name)
 			}
 			f.Set(reflect.ValueOf(uc))
 			continue
@@ -120,9 +132,9 @@ func UnmarshalRecord(record []string, v interface{}) error { // nolint: gocyclo
 
 			p := reflect.New(f.Type())
 			uc := p.Interface().(Unmarshaler)
-			err := uc.UnmarshalCSV(record[i])
+			err := uc.UnmarshalCSV(recVal)
 			if err != nil {
-				return errors.Wrapf(err, "error calling %s.UnmarshalCSV()", fieldName)
+				return errors.Wrapf(err, "error calling %s.UnmarshalCSV()", fi.Name)
 			}
 			f.Set(reflect.ValueOf(uc).Elem())
 			continue
@@ -139,48 +151,50 @@ func UnmarshalRecord(record []string, v interface{}) error { // nolint: gocyclo
 
 		switch f.Kind() {
 		case reflect.String:
-			f.SetString(record[i])
+			f.SetString(recVal)
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			ival, err := strconv.ParseInt(record[i], 10, 64)
+			ival, err := strconv.ParseInt(recVal, 10, 64)
 			if err != nil || f.OverflowInt(ival) {
-				return errors.Wrapf(err, "unable to convert %s to int in field %s", record[i], fieldName)
+				return errors.Wrapf(err, "unable to convert %s to int in field %s", recVal, fi.Name)
 			}
 			f.SetInt(ival)
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			ival, err := strconv.ParseUint(record[i], 10, 64)
+			ival, err := strconv.ParseUint(recVal, 10, 64)
 			if err != nil || f.OverflowUint(ival) {
-				return errors.Wrapf(err, "unable to convert %s to uint in field %s", record[i], fieldName)
+				return errors.Wrapf(err, "unable to convert %s to uint in field %s", recVal, fi.Name)
 			}
 			f.SetUint(ival)
 		case reflect.Float32, reflect.Float64:
-			fval, err := strconv.ParseFloat(record[i], 64)
+			fval, err := strconv.ParseFloat(recVal, 64)
 			if err != nil || f.OverflowFloat(fval) {
-				return errors.Wrapf(err, "unable to convert %s to float in field %s", record[i], fieldName)
+				return errors.Wrapf(err, "unable to convert %s to float in field %s", recVal, fi.Name)
 			}
 			f.SetFloat(fval)
 		case reflect.Bool:
-			bval, err := strconv.ParseBool(record[i])
+			bval, err := strconv.ParseBool(recVal)
 			if err != nil {
-				return errors.Wrapf(err, "unable to convert %s to bool in field %s", record[i], fieldName)
+				return errors.Wrapf(err, "unable to convert %s to bool in field %s", recVal, fi.Name)
 			}
 			f.SetBool(bval)
 		case reflect.Struct:
 			if f.Type().String() == "time.Time" {
-				expr := `csvplus:"format:(.+)"`
-				re := regexp.MustCompile(expr)
-				matches := re.FindStringSubmatch(string(s.Type().Field(i).Tag))
-				if len(matches) < 2 {
-					return fmt.Errorf("time.Time fields (%s) must have a struct tag that matches the format '%s', with the submatch being a valid time.Parse layout", fieldName, expr)
+				sf, found := s.Type().FieldByName(fi.Name)
+				if !found {
+					return errors.Errorf("unable to find struct field '%s'", fi.Name)
 				}
-				format := matches[1]
+				format := sf.Tag.Get("csvplusFormat")
+
+				if format == "" {
+					format = time.RFC3339
+				}
 				if format == "time.RFC3339" {
 					format = time.RFC3339
 				} else if format == "time.RFC3339Nano" {
 					format = time.RFC3339Nano
 				}
-				d, err := time.Parse(format, record[i])
+				d, err := time.Parse(format, recVal)
 				if err != nil {
-					return errors.Wrapf(err, "invalid layout format for field %s", fieldName)
+					return errors.Wrapf(err, "invalid layout format for field %s", fi.Name)
 				}
 				f.Set(reflect.ValueOf(d))
 				break
@@ -188,7 +202,7 @@ func UnmarshalRecord(record []string, v interface{}) error { // nolint: gocyclo
 			fallthrough
 
 		default:
-			return fmt.Errorf("unsupported type for %s: %s", fieldName, f.Type().String())
+			return fmt.Errorf("unsupported type for %s: %s", fi.Name, f.Type().String())
 		}
 	}
 
