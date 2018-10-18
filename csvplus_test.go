@@ -127,16 +127,6 @@ func ExampleUnmarshaler() {
 	// {Russ <nil> false <nil>}
 }
 
-type MyString string
-
-func (m *MyString) UnmarshalCSV(r string) error {
-	if m == nil {
-		return fmt.Errorf("cannot unmarshal into nil pointer")
-	}
-	*m = MyString(r)
-	return nil
-}
-
 func TestUnmarshal(t *testing.T) { // nolint: gocyclo
 	t.Run("general", func(t *testing.T) {
 		t.Run("slice as value instead of pointer", func(t *testing.T) {
