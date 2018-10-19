@@ -595,3 +595,32 @@ func ExampleDecoder_SetCSVReader() {
 	// {Rob 1999-11-01 00:00:00 +0000 UTC}
 	// {Russ <nil>}
 }
+
+func TestMarshal(t *testing.T) { // nolint: gocyclo
+	t.Run("general", func(t *testing.T) {
+		t.Run("no tags", func(t *testing.T) {
+			type Item struct {
+				First  string
+				Second int
+			}
+			items := []Item{
+				{
+					"a",
+					1,
+				},
+				{
+					"b",
+					2,
+				},
+			}
+			data, err := csvplus.Marshal(&items)
+			if err != nil {
+				t.Fatal(err)
+			}
+			expectedData := []byte("First,Second\na,1\nb,2\n")
+			if string(data) != string(expectedData) {
+				t.Errorf("expected: %s, got: %s", expectedData, data)
+			}
+		})
+	})
+}

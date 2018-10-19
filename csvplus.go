@@ -193,3 +193,149 @@ func (dec *Decoder) unmarshalRecord(record []string, v interface{}, fis []fieldI
 }
 
 var csvUnmarshalerType = reflect.TypeOf(new(Unmarshaler)).Elem()
+var csvMarshalerType = reflect.TypeOf(new(Marshaler)).Elem()
+
+// Unmarshaler is the interface implemented by types that can unmarshal a csv record of themselves.
+type Marshaler interface {
+	MarshalCSV() ([]byte, error)
+}
+
+func Marshal(v interface{}) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := NewEncoder(&buf)
+	err := enc.Encode(v)
+	if err != nil {
+		return nil, err
+	}
+	enc.csvWriter.Flush()
+	err2 := enc.csvWriter.Error()
+	if err2 != nil {
+		return nil, errors.Wrap(err, "error flushing csvWriter")
+	}
+	return buf.Bytes(), nil
+}
+
+// An Encoder writes csv data from a list of struct.
+type Encoder struct {
+	headerPassed   bool
+	csvWriter      *csv.Writer
+	structRegister structRegister
+}
+
+func NewEncoder(w io.Writer) *Encoder {
+	return &Encoder{
+		csvWriter: csv.NewWriter(w),
+	}
+}
+
+func (enc *Encoder) Encode(v interface{}) error {
+	rv := reflect.ValueOf(v)
+	rt := rv.Type()
+	if rv.Kind() != reflect.Ptr {
+		return fmt.Errorf("non pointer %s", rt)
+	}
+	if rv.Elem().Kind() != reflect.Slice {
+		return fmt.Errorf("expected slice, got %s", rv.Elem().Type())
+	}
+
+	// get type of slice items to build header row
+	// TODO: this only needs to be done once, register in struct register?
+	var fieldIndices []int
+	fieldsToAdd := make(map[int]fieldInfo)
+	var headerRow []string
+	st := reflect.TypeOf(v).Elem().Elem()
+	for i := 0; i < st.NumField(); i++ {
+		fi := fieldInfo{FieldIndex: i}
+		sf := st.Field(i)
+		fi.ColName = sf.Tag.Get("csvplus")
+		switch fi.ColName {
+		case "-":
+			continue
+		case "":
+			fi.ColName = sf.Name
+		}
+
+		if sf.Type.String() == "time.Time" || sf.Type.String() == "*time.Time" {
+			fi.Format = sf.Tag.Get("csvplusFormat")
+			if fi.Format == "" {
+				fi.Format = time.RFC3339
+			}
+		}
+
+		fieldIndices = append(fieldIndices, fi.FieldIndex)
+		fieldsToAdd[fi.FieldIndex] = fi
+		headerRow = append(headerRow, fi.ColName)
+	}
+
+	err := enc.csvWriter.Write(headerRow)
+	if err != nil {
+		return errors.Wrap(err, "unable to write header row")
+	}
+
+	containerValue := rv.Elem()
+
+	var record []string
+	for i := 0; i < containerValue.Len(); i++ {
+		record = nil
+		sv := containerValue.Index(i)
+
+		for _, fieldIndex := range fieldIndices {
+			fv := sv.Field(fieldIndex)
+
+			if fv.Type().Implements(csvMarshalerType) {
+				u := fv.Interface().(Marshaler)
+				b, err := u.MarshalCSV()
+				if err != nil {
+					return err
+				}
+				record = append(record, string(b))
+				continue
+			}
+
+			if fv.Kind() == reflect.Ptr {
+				if fv.IsNil() {
+					record = append(record, "")
+					continue
+				}
+
+				// dereference
+				fv = fv.Elem()
+			}
+
+			switch fv.Kind() {
+			case reflect.String:
+				record = append(record, fv.String())
+				continue
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				record = append(record, strconv.Itoa(int(fv.Int())))
+				continue
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				record = append(record, strconv.Itoa(int(fv.Uint())))
+				continue
+			case reflect.Float32, reflect.Float64:
+				// TODO: consider fmt.Sprintf("%.6f", fv.Float()), this can be a struct tag
+				record = append(record, strconv.FormatFloat(fv.Float(), 'f', -1, 64))
+				continue
+			case reflect.Bool:
+				record = append(record, strconv.FormatBool(fv.Bool()))
+				continue
+			case reflect.Struct:
+				if fv.Type().String() == "time.Time" {
+					t := fv.Interface().(time.Time)
+					record = append(record, t.Format(fieldsToAdd[i].Format))
+					continue
+				}
+
+				// TODO: consider returning error saying add MarshalCSV() method
+				record = append(record, fv.String())
+				continue
+			}
+		}
+
+		if err := enc.csvWriter.Write(record); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
