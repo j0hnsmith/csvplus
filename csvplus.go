@@ -48,7 +48,7 @@ func NewDecoder(r io.Reader) *Decoder {
 	}
 }
 
-// SetCSVReader allows for using a custom csv.Reader with custom config (eg | field separator instead of ,).
+// SetCSVReader allows for using a custom csv.Reader (eg | field separator instead of ,).
 func (dec *Decoder) SetCSVReader(r *csv.Reader) {
 	dec.csvReader = r
 }
@@ -226,6 +226,11 @@ func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{
 		csvWriter: csv.NewWriter(w),
 	}
+}
+
+// SetCSVWriter allows for using a csv.Writer with custom config (eg | field separator instead of ,).
+func (enc *Encoder) SetCSVWriter(r *csv.Writer) {
+	enc.csvWriter = r
 }
 
 func (enc *Encoder) Encode(v interface{}) error {
