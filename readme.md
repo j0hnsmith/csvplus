@@ -85,3 +85,31 @@ for _, item := range items {
     fmt.Println(item)
 }
 ```
+
+Marshal
+
+```go
+type Item struct {
+    First  string     `csvplus:"first"`
+    Second int        `csvplus:"second"`
+    Third  *bool      `csvplus:"third"`
+    Fourth *time.Time `csvplus:"fourth" csvplusFormat:"2006-01"`
+}
+
+tm, _ := time.Parse("2006-01", "2000-01")
+f := false
+items := []Item{
+    {"a", 1, nil, &tm},
+    {"b", 2, &f, nil},
+}
+data, err := csvplus.Marshal(&items)
+if err != nil {
+    panic(err)
+}
+
+fmt.Println(string(data))
+// Output:
+// first,second,third,fourth
+// a,1,,2000-01
+// b,2,false,
+```

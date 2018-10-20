@@ -134,6 +134,32 @@ func ExampleUnmarshaler() {
 	// {Russ <nil> false <nil>}
 }
 
+func ExampleMarshal() {
+	type Item struct {
+		First  string     `csvplus:"first"`
+		Second int        `csvplus:"second"`
+		Third  *bool      `csvplus:"third"`
+		Fourth *time.Time `csvplus:"fourth" csvplusFormat:"2006-01"`
+	}
+
+	tm, _ := time.Parse("2006-01", "2000-01")
+	f := false
+	items := []Item{
+		{"a", 1, nil, &tm},
+		{"b", 2, &f, nil},
+	}
+	data, err := csvplus.Marshal(&items)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(string(data))
+	// Output:
+	// first,second,third,fourth
+	// a,1,,2000-01
+	// b,2,false,
+}
+
 func TestUnmarshal(t *testing.T) { // nolint: gocyclo
 	t.Run("general", func(t *testing.T) {
 		t.Run("slice as value instead of pointer", func(t *testing.T) {

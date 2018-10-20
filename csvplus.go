@@ -322,7 +322,7 @@ func (enc *Encoder) Encode(v interface{}) error {
 			case reflect.Struct:
 				if fv.Type().String() == "time.Time" {
 					t := fv.Interface().(time.Time)
-					record = append(record, t.Format(fieldsToAdd[i].Format))
+					record = append(record, t.Format(fieldsToAdd[fieldIndex].Format))
 					continue
 				}
 
