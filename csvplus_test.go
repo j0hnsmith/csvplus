@@ -522,8 +522,8 @@ func TestUnmarshal(t *testing.T) { // nolint: gocyclo
 
 		t.Run("skipped field -", func(t *testing.T) {
 			type Item struct {
-				First  string
-				Second int `csvplus:"-"`
+				First  string `csvplus:"-"`
+				Second int
 			}
 			data := []byte("First,Second\na,1\nb,2")
 			var items []Item
@@ -534,11 +534,11 @@ func TestUnmarshal(t *testing.T) { // nolint: gocyclo
 			if len(items) != 2 {
 				t.Errorf("expected len of %d, got: %d", 2, len(items))
 			}
-			if items[0].Second != 0 {
-				t.Errorf("expected 2, got: %d", items[0].Second)
+			if items[0].First != "" {
+				t.Errorf("expected empty string, got: %d", items[0].First)
 			}
-			if items[1].Second != 0 {
-				t.Errorf("expected 2, got: %d", items[1].Second)
+			if items[1].First != "" {
+				t.Errorf("expected empty string, got: %d", items[1].First)
 			}
 		})
 	})
