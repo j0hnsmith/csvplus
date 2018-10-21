@@ -207,11 +207,6 @@ func Marshal(v interface{}) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	enc.csvWriter.Flush()
-	err2 := enc.csvWriter.Error()
-	if err2 != nil {
-		return nil, errors.Wrap(err, "error flushing csvWriter")
-	}
 	return buf.Bytes(), nil
 }
 
@@ -340,6 +335,11 @@ func (enc *Encoder) Encode(v interface{}) error {
 		if err := enc.csvWriter.Write(record); err != nil {
 			return err
 		}
+	}
+
+	enc.csvWriter.Flush()
+	if err := enc.csvWriter.Error(); err != nil {
+		return err
 	}
 
 	return nil
