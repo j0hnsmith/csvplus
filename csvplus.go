@@ -37,16 +37,14 @@ type Unmarshaler interface {
 
 // A Decoder reads and decodes CSV records from an input stream. Useful if your data doesn't have a header row.
 type Decoder struct {
-	headerPassed   bool
-	csvReader      *csv.Reader
-	structRegister structRegister
+	headerPassed bool
+	csvReader    *csv.Reader
 }
 
 // NewDecoder reads and decodes CSV records from r.
 func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{
-		structRegister: defaultStructRegister,
-		csvReader:      csv.NewReader(r),
+		csvReader: csv.NewReader(r),
 	}
 }
 
@@ -68,6 +66,7 @@ func (dec *Decoder) Decode(v interface{}) error {
 
 	containerValue := rv.Elem()
 	structType := rt.Elem().Elem()
+	var fis []fieldInfo
 
 	for {
 		record, err := dec.csvReader.Read()
@@ -80,14 +79,14 @@ func (dec *Decoder) Decode(v interface{}) error {
 
 		if !dec.headerPassed {
 			// register struct
-			dec.structRegister.Register(structType, record)
+			fis = getFieldInfo(structType, record)
 			dec.headerPassed = true
 			continue
 		}
 
 		structPZeroValue := reflect.New(structType)
 
-		if err := dec.unmarshalRecord(record, structPZeroValue.Interface()); err != nil {
+		if err := dec.unmarshalRecord(record, structPZeroValue.Interface(), fis); err != nil {
 			return err
 		}
 
@@ -98,12 +97,10 @@ func (dec *Decoder) Decode(v interface{}) error {
 }
 
 // unmarshalRecord sets the values from a single CSV record to the (exported) fields of the struct v.
-func (dec *Decoder) unmarshalRecord(record []string, v interface{}) error { // nolint: gocyclo
+func (dec *Decoder) unmarshalRecord(record []string, v interface{}, fis []fieldInfo) error { // nolint: gocyclo
 	rv := reflect.ValueOf(v)
 	s := rv.Elem()
-	st := s.Type()
 
-	fis := dec.structRegister.Fields[st].fields
 	for _, fi := range fis {
 		if fi.SkipField || fi.ColName == "" {
 			continue
@@ -178,21 +175,7 @@ func (dec *Decoder) unmarshalRecord(record []string, v interface{}) error { // n
 			f.SetBool(bval)
 		case reflect.Struct:
 			if f.Type().String() == "time.Time" {
-				sf, found := s.Type().FieldByName(fi.Name)
-				if !found {
-					return errors.Errorf("unable to find struct field '%s'", fi.Name)
-				}
-				format := sf.Tag.Get("csvplusFormat")
-
-				if format == "" {
-					format = time.RFC3339
-				}
-				if format == "time.RFC3339" {
-					format = time.RFC3339
-				} else if format == "time.RFC3339Nano" {
-					format = time.RFC3339Nano
-				}
-				d, err := time.Parse(format, recVal)
+				d, err := time.Parse(fi.Format, recVal)
 				if err != nil {
 					return errors.Wrapf(err, "invalid layout format for field %s", fi.Name)
 				}

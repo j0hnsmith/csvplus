@@ -8,26 +8,7 @@ import (
 	"unicode/utf8"
 )
 
-// structInfo stores all the field info for a single struct.
-type structInfo struct {
-	fields           []fieldInfo
-	headerColIndices []int
-}
-
-// structRegister is a container for all csv/struct field mappings.
-type structRegister struct {
-	Fields map[reflect.Type]structInfo
-}
-
-// newStructRegister provides an initialised structRegister, will probably be removed in a future version.
-func newStructRegister() structRegister {
-	sr := structRegister{
-		Fields: make(map[reflect.Type]structInfo),
-	}
-	return sr
-}
-
-func (sr *structRegister) parseTag(sf reflect.StructField) (string, bool) {
+func parseTag(sf reflect.StructField) (string, bool) {
 	tag := sf.Tag.Get("csvplus")
 	var omitempty bool
 	tokens := strings.Split(tag, ",")
@@ -38,22 +19,21 @@ func (sr *structRegister) parseTag(sf reflect.StructField) (string, bool) {
 	return tag, omitempty
 }
 
-func (sr *structRegister) getTimeFormat(sf reflect.StructField) (format string) {
+func getTimeFormat(sf reflect.StructField) (format string) {
 	if sf.Type.String() == "time.Time" || sf.Type.String() == "*time.Time" {
 		format = sf.Tag.Get("csvplusFormat")
-		if format == "" {
+		switch format {
+		case "", "time.RFC3339":
 			format = time.RFC3339
+		case "time.RFC3339Nano":
+			format = time.RFC3339Nano
 		}
 	}
 	return format
 }
 
 // Register maps columns in the csv data to struct fields.
-func (sr *structRegister) Register(st reflect.Type, headers []string) {
-	if sr.exists(st) {
-		return
-	}
-
+func getFieldInfo(st reflect.Type, headers []string) []fieldInfo {
 	headersMap := make(map[string]int)
 	for i, header := range headers {
 		headersMap[header] = i
@@ -73,7 +53,7 @@ func (sr *structRegister) Register(st reflect.Type, headers []string) {
 		}
 
 		var tag string
-		tag, fi.OmitEmpty = sr.parseTag(sf)
+		tag, fi.OmitEmpty = parseTag(sf)
 
 		switch tag {
 		case "":
@@ -110,7 +90,7 @@ func (sr *structRegister) Register(st reflect.Type, headers []string) {
 			continue
 		}
 
-		fi.Format = sr.getTimeFormat(sf)
+		fi.Format = getTimeFormat(sf)
 
 		fieldCounts[fi.ColName]++
 		ColNameToFieldInfo[fi.ColName] = fi
@@ -130,15 +110,7 @@ func (sr *structRegister) Register(st reflect.Type, headers []string) {
 		}
 	}
 
-	sr.Fields[st] = structInfo{
-		fields:           fieldsToStore,
-		headerColIndices: headerColIndices,
-	}
-}
-
-func (sr *structRegister) exists(rt reflect.Type) bool {
-	_, found := sr.Fields[rt]
-	return found
+	return fieldsToStore
 }
 
 // fieldInfo represents a field in a struct with tags parsed and stuct/csv record indices mapped.
@@ -151,6 +123,3 @@ type fieldInfo struct {
 	SkipField  bool
 	OmitEmpty  bool
 }
-
-// DefaultStructRegister is the default structRegister instance.
-var defaultStructRegister = newStructRegister()
