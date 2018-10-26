@@ -8,6 +8,9 @@ import (
 	"unicode/utf8"
 )
 
+const timeType = "time.Time"
+const timeTypePtr = "*time.Time"
+
 // structInfo stores all the field info for a single struct.
 type structInfo struct {
 	fields       map[int]fieldInfo
@@ -36,7 +39,7 @@ func parseTag(sf reflect.StructField) (string, bool) {
 // getTimeFormat gets a suitable time.Parse layout from a csvplusFormat struct tag, defaults to time.RFC3339 if no
 // format is found.
 func getTimeFormat(sf reflect.StructField) (format string) {
-	if sf.Type.String() == "time.Time" || sf.Type.String() == "*time.Time" {
+	if sf.Type.String() == timeType || sf.Type.String() == timeTypePtr {
 		format = sf.Tag.Get("csvplusFormat")
 		switch format {
 		case "", "time.RFC3339":
@@ -178,7 +181,7 @@ func (er *encRegister) Register(st reflect.Type) {
 			fi.ColIndex = i
 		}
 
-		if sf.Type.String() == "time.Time" || sf.Type.String() == "*time.Time" {
+		if sf.Type.String() == timeType || sf.Type.String() == timeTypePtr {
 			fi.Format = getTimeFormat(sf)
 		}
 

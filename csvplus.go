@@ -174,7 +174,7 @@ func (dec *Decoder) unmarshalRecord(record []string, v interface{}, fis []fieldI
 			}
 			f.SetBool(bval)
 		case reflect.Struct:
-			if f.Type().String() == "time.Time" {
+			if f.Type().String() == timeType {
 				d, err := time.Parse(fi.Format, recVal)
 				if err != nil {
 					return errors.Wrapf(err, "invalid layout format for field %s", fi.Name)
@@ -195,11 +195,12 @@ func (dec *Decoder) unmarshalRecord(record []string, v interface{}, fis []fieldI
 var csvUnmarshalerType = reflect.TypeOf(new(Unmarshaler)).Elem()
 var csvMarshalerType = reflect.TypeOf(new(Marshaler)).Elem()
 
-// Unmarshaler is the interface implemented by types that can unmarshal a csv record of themselves.
+// Marshaler is the interface implemented by types that can marshal a csv value (string) of themselves.
 type Marshaler interface {
 	MarshalCSV() ([]byte, error)
 }
 
+// Marshal marshals v into csv data.
 func Marshal(v interface{}) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := NewEncoder(&buf)
@@ -217,6 +218,7 @@ type Encoder struct {
 	encRegister  encRegister
 }
 
+// NewEncoder returns an initialised Encoder.
 func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{
 		csvWriter:   csv.NewWriter(w),
@@ -229,7 +231,8 @@ func (enc *Encoder) SetCSVWriter(r *csv.Writer) {
 	enc.csvWriter = r
 }
 
-func (enc *Encoder) Encode(v interface{}) error {
+// Encode encodes v into csv data.
+func (enc *Encoder) Encode(v interface{}) error { // nolint: gocyclo
 	rv := reflect.ValueOf(v)
 	rt := rv.Type()
 	if rv.Kind() != reflect.Ptr {
@@ -295,7 +298,7 @@ func (enc *Encoder) Encode(v interface{}) error {
 				record = append(record, strconv.FormatBool(fv.Bool()))
 				continue
 			case reflect.Struct:
-				if fv.Type().String() == "time.Time" {
+				if fv.Type().String() == timeType {
 					t := fv.Interface().(time.Time)
 					record = append(record, t.Format(enc.encRegister.Fields[st].fields[fieldIndex].Format))
 					continue
