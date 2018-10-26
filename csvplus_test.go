@@ -535,10 +535,10 @@ func TestUnmarshal(t *testing.T) { // nolint: gocyclo
 				t.Errorf("expected len of %d, got: %d", 2, len(items))
 			}
 			if items[0].First != "" {
-				t.Errorf("expected empty string, got: %d", items[0].First)
+				t.Errorf("expected empty string, got: %s", items[0].First)
 			}
 			if items[1].First != "" {
-				t.Errorf("expected empty string, got: %d", items[1].First)
+				t.Errorf("expected empty string, got: %s", items[1].First)
 			}
 		})
 	})
