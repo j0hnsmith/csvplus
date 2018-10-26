@@ -8,6 +8,20 @@ import (
 	"unicode/utf8"
 )
 
+// structInfo stores all the field info for a single struct.
+type structInfo struct {
+	fields       map[int]fieldInfo
+	fieldIndices []int
+	headerRow    []string // only used when marshaling
+}
+
+func newStructInfo() *structInfo {
+	return &structInfo{
+		fields: make(map[int]fieldInfo),
+	}
+}
+
+// parseTag gets a fieldname and omitempty from a csvplus struct tag.
 func parseTag(sf reflect.StructField) (string, bool) {
 	tag := sf.Tag.Get("csvplus")
 	var omitempty bool
@@ -19,6 +33,8 @@ func parseTag(sf reflect.StructField) (string, bool) {
 	return tag, omitempty
 }
 
+// getTimeFormat gets a suitable time.Parse layout from a csvplusFormat struct tag, defaults to time.RFC3339 if no
+// format is found.
 func getTimeFormat(sf reflect.StructField) (format string) {
 	if sf.Type.String() == "time.Time" || sf.Type.String() == "*time.Time" {
 		format = sf.Tag.Get("csvplusFormat")
@@ -80,7 +96,7 @@ func getFieldInfo(st reflect.Type, headers []string) []fieldInfo {
 
 		case "-":
 			fi.SkipField = true // used only for marshalling, if at all, maybe remove later
-
+			fi.ColName = "-"
 		default:
 			fi.ColName = tag
 			if colIndex, found := headersMap[fi.ColName]; found {
@@ -122,4 +138,75 @@ type fieldInfo struct {
 	Format     string // only populated for time.Time fields
 	SkipField  bool
 	OmitEmpty  bool
+}
+
+// encRegister is a cache for data needed to marshal, since a
+type encRegister struct {
+	Fields map[reflect.Type]structInfo
+}
+
+// newEncRegister returns an initialised encRegister.
+func newEncRegister() encRegister {
+	return encRegister{
+		Fields: make(map[reflect.Type]structInfo),
+	}
+}
+
+// defaultEncRegister is a encRegister singleton since there only needs to be one.
+var defaultEncRegister = newEncRegister()
+
+// Register introspects and stores the necessary data to marshal csv data.
+func (er *encRegister) Register(st reflect.Type) {
+	if _, found := er.Fields[st]; found {
+		return
+	}
+
+	si := newStructInfo()
+	for i := 0; i < st.NumField(); i++ {
+		fi := fieldInfo{FieldIndex: i}
+		sf := st.Field(i)
+		fi.ColName = sf.Tag.Get("csvplus")
+		switch fi.ColName {
+		case "-":
+			fi.SkipField = true
+		case "":
+			fi.ColName = sf.Name
+		}
+
+		fi.Name = sf.Name
+		if !fi.SkipField {
+			fi.ColIndex = i
+		}
+
+		if sf.Type.String() == "time.Time" || sf.Type.String() == "*time.Time" {
+			fi.Format = getTimeFormat(sf)
+		}
+
+		si.fields[fi.FieldIndex] = fi
+
+		if !fi.SkipField {
+			si.fieldIndices = append(si.fieldIndices, fi.ColIndex)
+			si.headerRow = append(si.headerRow, fi.ColName)
+		}
+	}
+
+	er.Fields[st] = *si
+}
+
+// GetEncodeIndices returns the struct field indices needed to marshal csv data for this type.
+func (er *encRegister) GetEncodeIndices(st reflect.Type) []int {
+	si, found := er.Fields[st]
+	if !found {
+		return nil
+	}
+	return si.fieldIndices
+}
+
+// GetEncodeHeaders returns the values for the csv header row for this type.
+func (er *encRegister) GetEncodeHeaders(st reflect.Type) []string {
+	si, found := er.Fields[st]
+	if !found {
+		return nil
+	}
+	return si.headerRow
 }

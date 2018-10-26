@@ -212,14 +212,15 @@ func Marshal(v interface{}) ([]byte, error) {
 
 // An Encoder writes csv data from a list of struct.
 type Encoder struct {
-	headerPassed   bool
-	csvWriter      *csv.Writer
-	structRegister structRegister
+	headerPassed bool
+	csvWriter    *csv.Writer
+	encRegister  encRegister
 }
 
 func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{
-		csvWriter: csv.NewWriter(w),
+		csvWriter:   csv.NewWriter(w),
+		encRegister: defaultEncRegister,
 	}
 }
 
@@ -238,36 +239,10 @@ func (enc *Encoder) Encode(v interface{}) error {
 		return fmt.Errorf("expected slice, got %s", rv.Elem().Type())
 	}
 
-	// get type of slice items to build header row
-	// TODO: this only needs to be done once, register in struct register?
-	var fieldIndices []int
-	fieldsToAdd := make(map[int]fieldInfo)
-	var headerRow []string
 	st := reflect.TypeOf(v).Elem().Elem()
-	for i := 0; i < st.NumField(); i++ {
-		fi := fieldInfo{FieldIndex: i}
-		sf := st.Field(i)
-		fi.ColName = sf.Tag.Get("csvplus")
-		switch fi.ColName {
-		case "-":
-			continue
-		case "":
-			fi.ColName = sf.Name
-		}
+	enc.encRegister.Register(st)
 
-		if sf.Type.String() == "time.Time" || sf.Type.String() == "*time.Time" {
-			fi.Format = sf.Tag.Get("csvplusFormat")
-			if fi.Format == "" {
-				fi.Format = time.RFC3339
-			}
-		}
-
-		fieldIndices = append(fieldIndices, fi.FieldIndex)
-		fieldsToAdd[fi.FieldIndex] = fi
-		headerRow = append(headerRow, fi.ColName)
-	}
-
-	err := enc.csvWriter.Write(headerRow)
+	err := enc.csvWriter.Write(enc.encRegister.GetEncodeHeaders(st))
 	if err != nil {
 		return errors.Wrap(err, "unable to write header row")
 	}
@@ -279,7 +254,7 @@ func (enc *Encoder) Encode(v interface{}) error {
 		record = nil
 		sv := containerValue.Index(i)
 
-		for _, fieldIndex := range fieldIndices {
+		for _, fieldIndex := range enc.encRegister.GetEncodeIndices(st) {
 			fv := sv.Field(fieldIndex)
 
 			if fv.Type().Implements(csvMarshalerType) {
@@ -313,7 +288,7 @@ func (enc *Encoder) Encode(v interface{}) error {
 				record = append(record, strconv.Itoa(int(fv.Uint())))
 				continue
 			case reflect.Float32, reflect.Float64:
-				// TODO: consider fmt.Sprintf("%.6f", fv.Float()), this can be a struct tag
+				// TODO: consider fmt.Sprintf("%.6f", fv.Float()), this could come from a struct tag
 				record = append(record, strconv.FormatFloat(fv.Float(), 'f', -1, 64))
 				continue
 			case reflect.Bool:
@@ -322,11 +297,10 @@ func (enc *Encoder) Encode(v interface{}) error {
 			case reflect.Struct:
 				if fv.Type().String() == "time.Time" {
 					t := fv.Interface().(time.Time)
-					record = append(record, t.Format(fieldsToAdd[fieldIndex].Format))
+					record = append(record, t.Format(enc.encRegister.Fields[st].fields[fieldIndex].Format))
 					continue
 				}
 
-				// TODO: consider returning error saying add MarshalCSV() method
 				record = append(record, fv.String())
 				continue
 			}
