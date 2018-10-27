@@ -49,8 +49,14 @@ func NewDecoder(r io.Reader) *Decoder {
 }
 
 // SetCSVReader allows for using a custom csv.Reader (eg | field separator instead of ,).
-func (dec *Decoder) SetCSVReader(r *csv.Reader) {
+func (dec *Decoder) SetCSVReader(r *csv.Reader) *Decoder {
 	dec.csvReader = r
+	return dec
+}
+
+func (dec *Decoder) UseHeader(b bool) *Decoder {
+	dec.withHeader = b
+	return dec
 }
 
 // Decode reads reads csv recorder into v.
