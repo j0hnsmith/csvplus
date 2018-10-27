@@ -888,3 +888,25 @@ func TestMarshalReader(t *testing.T) {
 		t.Errorf("incorrect output, expected: %s, got: %s", expectedData, buf.String())
 	}
 }
+
+func TestMarshalWithoutHeaders(t *testing.T) {
+	type Item struct {
+		First  string `csvplus:"-"`
+		Second int
+		Third  bool
+	}
+	items := []Item{
+		{"a", 1, true},
+		{"b", 2, false},
+	}
+
+	data, err := csvplus.MarshalWithoutHeader(&items)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedData := "1,true\n2,false\n"
+	if string(data) != expectedData {
+		t.Errorf("incorrect output, expected: %s, got: %s", expectedData, data)
+	}
+}

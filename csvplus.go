@@ -222,11 +222,22 @@ func MarshalWriter(v interface{}, w io.Writer) error {
 	return NewEncoder(w).Encode(v)
 }
 
+// MarshalWithoutHeader writes csv data without a header row.
+func MarshalWithoutHeader(v interface{}) ([]byte, error) {
+	var buf bytes.Buffer
+
+	err := NewEncoder(&buf).UseHeader(false).Encode(v)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 // An Encoder writes csv data from a list of struct.
 type Encoder struct {
-	headerPassed bool
-	csvWriter    *csv.Writer
-	encRegister  encRegister
+	csvWriter        *csv.Writer
+	withoutHeaderRow bool
+	encRegister      encRegister
 }
 
 // NewEncoder returns an initialised Encoder.
@@ -238,8 +249,14 @@ func NewEncoder(w io.Writer) *Encoder {
 }
 
 // SetCSVWriter allows for using a csv.Writer with custom config (eg | field separator instead of ,).
-func (enc *Encoder) SetCSVWriter(r *csv.Writer) {
+func (enc *Encoder) SetCSVWriter(r *csv.Writer) *Encoder {
 	enc.csvWriter = r
+	return enc
+}
+
+func (enc *Encoder) UseHeader(v bool) *Encoder {
+	enc.withoutHeaderRow = !v
+	return enc
 }
 
 // Encode encodes v into csv data.
@@ -256,9 +273,11 @@ func (enc *Encoder) Encode(v interface{}) error { // nolint: gocyclo
 	st := reflect.TypeOf(v).Elem().Elem()
 	enc.encRegister.Register(st)
 
-	err := enc.csvWriter.Write(enc.encRegister.GetEncodeHeaders(st))
-	if err != nil {
-		return errors.Wrap(err, "unable to write header row")
+	if !enc.withoutHeaderRow {
+		err := enc.csvWriter.Write(enc.encRegister.GetEncodeHeaders(st))
+		if err != nil {
+			return errors.Wrap(err, "unable to write header row")
+		}
 	}
 
 	containerValue := rv.Elem()
