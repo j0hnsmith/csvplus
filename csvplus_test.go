@@ -160,6 +160,36 @@ func ExampleMarshal() {
 	// b,2,false,
 }
 
+var benchData []byte
+
+func BenchmarkMarshal(b *testing.B) {
+	type Item struct {
+		First  string `csvplus:"first"`
+		Second int    `csvplus:"second"`
+		Third  *bool  `csvplus:"third"`
+	}
+
+	f := false
+	items := []Item{
+		{"a", 1, nil},
+		{"b", 2, &f},
+	}
+	var data []byte
+	var err error
+	for n := 0; n < b.N; n++ {
+		data = nil
+		// always record the result of Fib to prevent
+		// the compiler eliminating the function call.
+		data, err = csvplus.Marshal(&items)
+		if err != nil {
+			panic(err)
+		}
+	}
+	// always store the result to a package level variable
+	// so the compiler cannot eliminate the Benchmark itself.
+	benchData = data
+}
+
 func TestUnmarshal(t *testing.T) { // nolint: gocyclo
 	t.Run("general", func(t *testing.T) {
 		t.Run("slice as value instead of pointer", func(t *testing.T) {
