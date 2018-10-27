@@ -211,6 +211,11 @@ func Marshal(v interface{}) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// MarshalWriter marshals v into the given writer.
+func MarshalWriter(v interface{}, w io.Writer) error {
+	return NewEncoder(w).Encode(v)
+}
+
 // An Encoder writes csv data from a list of struct.
 type Encoder struct {
 	headerPassed bool

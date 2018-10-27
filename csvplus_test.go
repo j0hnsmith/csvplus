@@ -867,3 +867,24 @@ func TestMarshal(t *testing.T) { // nolint: gocyclo
 		}
 	})
 }
+
+func TestMarshalReader(t *testing.T) {
+	type Item struct {
+		First  string
+		Second int
+	}
+	items := []Item{
+		{"a", 1},
+		{"b", 2},
+	}
+	var buf bytes.Buffer
+	err := csvplus.MarshalWriter(&items, &buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedData := "First,Second\na,1\nb,2\n"
+
+	if expectedData != buf.String() {
+		t.Errorf("incorrect output, expected: %s, got: %s", expectedData, buf.String())
+	}
+}
