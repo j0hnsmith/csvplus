@@ -1,4 +1,4 @@
-// Package csvplus unmarshals CSV data directly into a slice of structs, types are converted to those
+// Package csvplus marshals/unmarshals CSV data directly from/to slice of structs, types are converted to those
 // matching the fields on the struct. Layout strings can be provided via struct tags for time.Time fields.
 package csvplus
 
