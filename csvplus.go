@@ -61,6 +61,7 @@ func (dec *Decoder) SetCSVReader(r *csv.Reader) *Decoder {
 	return dec
 }
 
+// UseHeader sets whether the first data row is a header row.
 func (dec *Decoder) UseHeader(b bool) *Decoder {
 	dec.withoutHeader = !b
 	return dec
@@ -266,6 +267,7 @@ func (enc *Encoder) SetCSVWriter(r *csv.Writer) *Encoder {
 	return enc
 }
 
+// UseHeader sets whether to add a header row to the csv data.
 func (enc *Encoder) UseHeader(v bool) *Encoder {
 	enc.withoutHeaderRow = !v
 	return enc

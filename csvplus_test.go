@@ -177,7 +177,6 @@ func BenchmarkMarshal(b *testing.B) {
 	var data []byte
 	var err error
 	for n := 0; n < b.N; n++ {
-		data = nil
 		// always record the result of Fib to prevent
 		// the compiler eliminating the function call.
 		data, err = csvplus.Marshal(&items)
@@ -599,7 +598,7 @@ func TestUnmarshal(t *testing.T) { // nolint: gocyclo
 	})
 }
 
-func TestUnmarshalWithoutHeader(t *testing.T) {
+func TestUnmarshalWithoutHeader(t *testing.T) { // nolint: gocyclo
 	t.Run("works", func(t *testing.T) {
 		type Item struct {
 			First  string `csvplus:"-"`
