@@ -2,7 +2,6 @@ package csvplus
 
 import (
 	"reflect"
-	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -22,18 +21,6 @@ func newStructInfo() *structInfo {
 	return &structInfo{
 		fields: make(map[int]fieldInfo),
 	}
-}
-
-// parseTag gets a fieldname and omitempty from a csvplus struct tag.
-func parseTag(sf reflect.StructField) (string, bool) {
-	tag := sf.Tag.Get("csvplus")
-	var omitempty bool
-	tokens := strings.Split(tag, ",")
-	if len(tokens) > 1 && tokens[1] == "omitempty" {
-		omitempty = true
-	}
-	tag = tokens[0]
-	return tag, omitempty
 }
 
 // getTimeFormat gets a suitable time.Parse layout from a csvplusFormat struct tag, defaults to time.RFC3339 if no
@@ -71,8 +58,7 @@ func getFieldInfo(st reflect.Type, headers []string) []fieldInfo {
 			FieldIndex: i,
 		}
 
-		var tag string
-		tag, fi.OmitEmpty = parseTag(sf)
+		tag := sf.Tag.Get("csvplus")
 
 		switch tag {
 		case "":
@@ -140,7 +126,6 @@ type fieldInfo struct {
 	ColIndex   int
 	Format     string // only populated for time.Time fields
 	SkipField  bool
-	OmitEmpty  bool
 }
 
 // encRegister is a cache for data needed to marshal, since a
