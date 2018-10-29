@@ -30,6 +30,12 @@ func UnmarshalReader(r io.Reader, v interface{}) error {
 	return NewDecoder(r).Decode(v)
 }
 
+// UnmarshalWithoutHeader is used to unmarshal csv data that doesn't have a header row.
+func UnmarshalWithoutHeader(data []byte, v interface{}) error {
+	buf := bytes.NewBuffer(data)
+	return NewDecoder(buf).UseHeader(false).Decode(v)
+}
+
 // Unmarshaler is the interface implemented by types that can unmarshal a csv record of themselves.
 type Unmarshaler interface {
 	UnmarshalCSV(string) error
@@ -37,8 +43,9 @@ type Unmarshaler interface {
 
 // A Decoder reads and decodes CSV records from an input stream. Useful if your data doesn't have a header row.
 type Decoder struct {
-	headerPassed bool
-	csvReader    *csv.Reader
+	headerPassed  bool
+	withoutHeader bool
+	csvReader     *csv.Reader
 }
 
 // NewDecoder reads and decodes CSV records from r.
@@ -55,7 +62,7 @@ func (dec *Decoder) SetCSVReader(r *csv.Reader) *Decoder {
 }
 
 func (dec *Decoder) UseHeader(b bool) *Decoder {
-	dec.withHeader = b
+	dec.withoutHeader = !b
 	return dec
 }
 
@@ -84,10 +91,11 @@ func (dec *Decoder) Decode(v interface{}) error {
 		}
 
 		if !dec.headerPassed {
-			// register struct
-			fis = getFieldInfo(structType, record)
+			fis = getFieldInfo(structType, dec.withoutHeader, record)
 			dec.headerPassed = true
-			continue
+			if !dec.withoutHeader {
+				continue
+			}
 		}
 
 		structPZeroValue := reflect.New(structType)
@@ -110,6 +118,10 @@ func (dec *Decoder) unmarshalRecord(record []string, v interface{}, fis []fieldI
 	for _, fi := range fis {
 		if fi.SkipField || fi.ColName == "" {
 			continue
+		}
+
+		if (len(record) - 1) < fi.ColIndex {
+			return errors.Errorf("not enough columns in csv data")
 		}
 
 		recVal := record[fi.ColIndex]

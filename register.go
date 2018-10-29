@@ -2,6 +2,7 @@ package csvplus
 
 import (
 	"reflect"
+	"strconv"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -39,14 +40,15 @@ func getTimeFormat(sf reflect.StructField) (format string) {
 }
 
 // Register maps columns in the csv data to struct fields.
-func getFieldInfo(st reflect.Type, headers []string) []fieldInfo {
+func getFieldInfo(st reflect.Type, withoutHeader bool, header []string) []fieldInfo {
 	headersMap := make(map[string]int)
-	for i, header := range headers {
+	for i, header := range header {
 		headersMap[header] = i
 	}
 	fieldCounts := make(map[string]int)
 
 	ColNameToFieldInfo := make(map[string]fieldInfo)
+	var skipCount int
 
 	// iterate struct tags to extract all names
 	var fi fieldInfo
@@ -66,7 +68,11 @@ func getFieldInfo(st reflect.Type, headers []string) []fieldInfo {
 			var colIndex int
 
 			if colIndex, found = headersMap[fi.Name]; found {
-				fi.ColName = fi.Name
+				if withoutHeader {
+					fi.ColName = strconv.Itoa(i)
+				} else {
+					fi.ColName = fi.Name
+				}
 				fi.ColIndex = colIndex
 				break
 			}
@@ -78,6 +84,10 @@ func getFieldInfo(st reflect.Type, headers []string) []fieldInfo {
 				fi.ColName = lowerName
 				fi.ColIndex = colIndex
 				break
+			} else if withoutHeader {
+				fi.ColName = strconv.Itoa(i)
+				fi.ColIndex = i - skipCount
+				break
 			}
 
 			// this field isn't mapped to a header row
@@ -86,6 +96,7 @@ func getFieldInfo(st reflect.Type, headers []string) []fieldInfo {
 		case "-":
 			fi.SkipField = true // used only for marshalling, if at all, maybe remove later
 			fi.ColName = "-"
+			skipCount++
 		default:
 			fi.ColName = tag
 			if colIndex, found := headersMap[fi.ColName]; found {

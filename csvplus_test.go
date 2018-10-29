@@ -599,6 +599,87 @@ func TestUnmarshal(t *testing.T) { // nolint: gocyclo
 	})
 }
 
+func TestUnmarshalWithoutHeader(t *testing.T) {
+	t.Run("works", func(t *testing.T) {
+		type Item struct {
+			First  string `csvplus:"-"`
+			Second int
+			Third  bool
+		}
+
+		data := []byte("1,true\n2,false")
+		var items []Item
+		err := csvplus.UnmarshalWithoutHeader(data, &items)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(items) != 2 {
+			t.Error()
+		}
+		if items[0].First != "" {
+			t.Errorf("expected empty string, got: %v", items[0].First)
+		}
+		if items[0].Second != 1 {
+			t.Errorf("expected 1, got: %v", items[0].First)
+		}
+		if items[0].Third != true {
+			t.Errorf("expected true, got: %v", items[1].First)
+		}
+		if items[1].First != "" {
+			t.Errorf("expected empty string, got: %v", items[1].First)
+		}
+		if items[1].Second != 2 {
+			t.Errorf("expected 2, got: %v", items[1].First)
+		}
+		if items[1].Third != false {
+			t.Errorf("expected false, got: %v", items[1].First)
+		}
+	})
+
+	t.Run("extra fields in data are ignored", func(t *testing.T) {
+		type Item struct {
+			First  string
+			Second int
+		}
+
+		data := []byte("foo,1,true\nbar,2,false\n")
+		var items []Item
+		err := csvplus.UnmarshalWithoutHeader(data, &items)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(items) != 2 {
+			t.Error()
+		}
+		if items[0].First != "foo" {
+			t.Errorf("expected empty string, got: %v", items[0].First)
+		}
+		if items[0].Second != 1 {
+			t.Errorf("expected 1, got: %v", items[0].First)
+		}
+		if items[1].First != "bar" {
+			t.Errorf("expected empty string, got: %v", items[1].First)
+		}
+		if items[1].Second != 2 {
+			t.Errorf("expected 2, got: %v", items[1].First)
+		}
+	})
+	t.Run("extra fields in struct", func(t *testing.T) {
+		type Item struct {
+			First  string
+			Second int
+			Third  bool
+		}
+
+		data := []byte("foo,1\nbar,2\n")
+		var items []Item
+		err := csvplus.UnmarshalWithoutHeader(data, &items)
+		if err == nil {
+			t.Fatal("expected not enough columns in csv data error")
+		}
+	})
+}
+
 func TestUnmarshalReader(t *testing.T) {
 	type Item struct {
 		First  string
@@ -889,7 +970,7 @@ func TestMarshalReader(t *testing.T) {
 	}
 }
 
-func TestMarshalWithoutHeaders(t *testing.T) {
+func TestMarshalWithoutHeader(t *testing.T) {
 	type Item struct {
 		First  string `csvplus:"-"`
 		Second int
