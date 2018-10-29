@@ -30,6 +30,12 @@ func UnmarshalReader(r io.Reader, v interface{}) error {
 	return NewDecoder(r).Decode(v)
 }
 
+// UnmarshalWithoutHeader is used to unmarshal csv data that doesn't have a header row.
+func UnmarshalWithoutHeader(data []byte, v interface{}) error {
+	buf := bytes.NewBuffer(data)
+	return NewDecoder(buf).UseHeader(false).Decode(v)
+}
+
 // Unmarshaler is the interface implemented by types that can unmarshal a csv record of themselves.
 type Unmarshaler interface {
 	UnmarshalCSV(string) error
@@ -37,22 +43,28 @@ type Unmarshaler interface {
 
 // A Decoder reads and decodes CSV records from an input stream. Useful if your data doesn't have a header row.
 type Decoder struct {
-	headerPassed   bool
-	csvReader      *csv.Reader
-	structRegister structRegister
+	headerPassed  bool
+	withoutHeader bool
+	csvReader     *csv.Reader
 }
 
 // NewDecoder reads and decodes CSV records from r.
 func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{
-		structRegister: defaultStructRegister,
-		csvReader:      csv.NewReader(r),
+		csvReader: csv.NewReader(r),
 	}
 }
 
-// SetCSVReader allows for using a custom csv.Reader with custom config (eg | field separator instead of ,).
-func (dec *Decoder) SetCSVReader(r *csv.Reader) {
+// SetCSVReader allows for using a custom csv.Reader (eg | field separator instead of ,).
+func (dec *Decoder) SetCSVReader(r *csv.Reader) *Decoder {
 	dec.csvReader = r
+	return dec
+}
+
+// UseHeader sets whether the first data row is a header row.
+func (dec *Decoder) UseHeader(b bool) *Decoder {
+	dec.withoutHeader = !b
+	return dec
 }
 
 // Decode reads reads csv recorder into v.
@@ -68,6 +80,7 @@ func (dec *Decoder) Decode(v interface{}) error {
 
 	containerValue := rv.Elem()
 	structType := rt.Elem().Elem()
+	var fis []fieldInfo
 
 	for {
 		record, err := dec.csvReader.Read()
@@ -79,15 +92,16 @@ func (dec *Decoder) Decode(v interface{}) error {
 		}
 
 		if !dec.headerPassed {
-			// register struct
-			dec.structRegister.Register(structType, record)
+			fis = getFieldInfo(structType, dec.withoutHeader, record)
 			dec.headerPassed = true
-			continue
+			if !dec.withoutHeader {
+				continue
+			}
 		}
 
 		structPZeroValue := reflect.New(structType)
 
-		if err := dec.unmarshalRecord(record, structPZeroValue.Interface()); err != nil {
+		if err := dec.unmarshalRecord(record, structPZeroValue.Interface(), fis); err != nil {
 			return err
 		}
 
@@ -98,15 +112,17 @@ func (dec *Decoder) Decode(v interface{}) error {
 }
 
 // unmarshalRecord sets the values from a single CSV record to the (exported) fields of the struct v.
-func (dec *Decoder) unmarshalRecord(record []string, v interface{}) error { // nolint: gocyclo
+func (dec *Decoder) unmarshalRecord(record []string, v interface{}, fis []fieldInfo) error { // nolint: gocyclo
 	rv := reflect.ValueOf(v)
 	s := rv.Elem()
-	st := s.Type()
 
-	fis := dec.structRegister.Fields[st].fields
 	for _, fi := range fis {
 		if fi.SkipField || fi.ColName == "" {
 			continue
+		}
+
+		if (len(record) - 1) < fi.ColIndex {
+			return errors.Errorf("not enough columns in csv data")
 		}
 
 		recVal := record[fi.ColIndex]
@@ -177,22 +193,8 @@ func (dec *Decoder) unmarshalRecord(record []string, v interface{}) error { // n
 			}
 			f.SetBool(bval)
 		case reflect.Struct:
-			if f.Type().String() == "time.Time" {
-				sf, found := s.Type().FieldByName(fi.Name)
-				if !found {
-					return errors.Errorf("unable to find struct field '%s'", fi.Name)
-				}
-				format := sf.Tag.Get("csvplusFormat")
-
-				if format == "" {
-					format = time.RFC3339
-				}
-				if format == "time.RFC3339" {
-					format = time.RFC3339
-				} else if format == "time.RFC3339Nano" {
-					format = time.RFC3339Nano
-				}
-				d, err := time.Parse(format, recVal)
+			if f.Type().String() == timeType {
+				d, err := time.Parse(fi.Format, recVal)
 				if err != nil {
 					return errors.Wrapf(err, "invalid layout format for field %s", fi.Name)
 				}
@@ -210,3 +212,156 @@ func (dec *Decoder) unmarshalRecord(record []string, v interface{}) error { // n
 }
 
 var csvUnmarshalerType = reflect.TypeOf(new(Unmarshaler)).Elem()
+var csvMarshalerType = reflect.TypeOf(new(Marshaler)).Elem()
+
+// Marshaler is the interface implemented by types that can marshal a csv value (string) of themselves.
+type Marshaler interface {
+	MarshalCSV() ([]byte, error)
+}
+
+// Marshal marshals v into csv data.
+func Marshal(v interface{}) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := NewEncoder(&buf)
+	err := enc.Encode(v)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// MarshalWriter marshals v into the given writer.
+func MarshalWriter(v interface{}, w io.Writer) error {
+	return NewEncoder(w).Encode(v)
+}
+
+// MarshalWithoutHeader writes csv data without a header row.
+func MarshalWithoutHeader(v interface{}) ([]byte, error) {
+	var buf bytes.Buffer
+
+	err := NewEncoder(&buf).UseHeader(false).Encode(v)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// An Encoder writes csv data from a list of struct.
+type Encoder struct {
+	csvWriter        *csv.Writer
+	withoutHeaderRow bool
+	encRegister      encRegister
+}
+
+// NewEncoder returns an initialised Encoder.
+func NewEncoder(w io.Writer) *Encoder {
+	return &Encoder{
+		csvWriter:   csv.NewWriter(w),
+		encRegister: defaultEncRegister,
+	}
+}
+
+// SetCSVWriter allows for using a csv.Writer with custom config (eg | field separator instead of ,).
+func (enc *Encoder) SetCSVWriter(r *csv.Writer) *Encoder {
+	enc.csvWriter = r
+	return enc
+}
+
+// UseHeader sets whether to add a header row to the csv data.
+func (enc *Encoder) UseHeader(v bool) *Encoder {
+	enc.withoutHeaderRow = !v
+	return enc
+}
+
+// Encode encodes v into csv data.
+func (enc *Encoder) Encode(v interface{}) error { // nolint: gocyclo
+	rv := reflect.ValueOf(v)
+	rt := rv.Type()
+	if rv.Kind() != reflect.Ptr {
+		return fmt.Errorf("non pointer %s", rt)
+	}
+	if rv.Elem().Kind() != reflect.Slice {
+		return fmt.Errorf("expected slice, got %s", rv.Elem().Type())
+	}
+
+	st := reflect.TypeOf(v).Elem().Elem()
+	enc.encRegister.Register(st)
+
+	if !enc.withoutHeaderRow {
+		err := enc.csvWriter.Write(enc.encRegister.GetEncodeHeaders(st))
+		if err != nil {
+			return errors.Wrap(err, "unable to write header row")
+		}
+	}
+
+	containerValue := rv.Elem()
+
+	var record []string
+	for i := 0; i < containerValue.Len(); i++ {
+		record = nil
+		sv := containerValue.Index(i)
+
+		for _, fieldIndex := range enc.encRegister.GetEncodeIndices(st) {
+			fv := sv.Field(fieldIndex)
+
+			if fv.Type().Implements(csvMarshalerType) {
+				u := fv.Interface().(Marshaler)
+				b, err := u.MarshalCSV()
+				if err != nil {
+					return err
+				}
+				record = append(record, string(b))
+				continue
+			}
+
+			if fv.Kind() == reflect.Ptr {
+				if fv.IsNil() {
+					record = append(record, "")
+					continue
+				}
+
+				// dereference
+				fv = fv.Elem()
+			}
+
+			switch fv.Kind() {
+			case reflect.String:
+				record = append(record, fv.String())
+				continue
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				record = append(record, strconv.Itoa(int(fv.Int())))
+				continue
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				record = append(record, strconv.Itoa(int(fv.Uint())))
+				continue
+			case reflect.Float32, reflect.Float64:
+				// TODO: consider fmt.Sprintf("%.6f", fv.Float()), this could come from a struct tag
+				record = append(record, strconv.FormatFloat(fv.Float(), 'f', -1, 64))
+				continue
+			case reflect.Bool:
+				record = append(record, strconv.FormatBool(fv.Bool()))
+				continue
+			case reflect.Struct:
+				if fv.Type().String() == timeType {
+					t := fv.Interface().(time.Time)
+					record = append(record, t.Format(enc.encRegister.Fields[st].fields[fieldIndex].Format))
+					continue
+				}
+
+				record = append(record, fv.String())
+				continue
+			}
+		}
+
+		if err := enc.csvWriter.Write(record); err != nil {
+			return err
+		}
+	}
+
+	enc.csvWriter.Flush()
+	if err := enc.csvWriter.Error(); err != nil {
+		return err
+	}
+
+	return nil
+}

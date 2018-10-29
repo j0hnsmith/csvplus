@@ -86,6 +86,13 @@ func (ynb *YesNoBool) UnmarshalCSV(s string) error {
 	return fmt.Errorf("unable to convert %s to bool", s)
 }
 
+func (ynb *YesNoBool) MarshalCSV() ([]byte, error) {
+	if ynb == nil || !*ynb {
+		return []byte("no"), nil
+	}
+	return []byte("yes"), nil
+}
+
 func ExampleUnmarshaler() {
 	//	type YesNoBool bool
 
@@ -125,6 +132,61 @@ func ExampleUnmarshaler() {
 	// Output:
 	// {Rob true (dereferenced) true 1999-11-01 00:00:00 +0000 UTC}
 	// {Russ <nil> false <nil>}
+}
+
+func ExampleMarshal() {
+	type Item struct {
+		First  string     `csvplus:"first"`
+		Second int        `csvplus:"second"`
+		Third  *bool      `csvplus:"third"`
+		Fourth *time.Time `csvplus:"fourth" csvplusFormat:"2006-01"`
+	}
+
+	tm, _ := time.Parse("2006-01", "2000-01")
+	f := false
+	items := []Item{
+		{"a", 1, nil, &tm},
+		{"b", 2, &f, nil},
+	}
+	data, err := csvplus.Marshal(&items)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(string(data))
+	// Output:
+	// first,second,third,fourth
+	// a,1,,2000-01
+	// b,2,false,
+}
+
+var benchData []byte
+
+func BenchmarkMarshal(b *testing.B) {
+	type Item struct {
+		First  string `csvplus:"first"`
+		Second int    `csvplus:"second"`
+		Third  *bool  `csvplus:"third"`
+	}
+
+	f := false
+	items := []Item{
+		{"a", 1, nil},
+		{"b", 2, &f},
+	}
+	var data []byte
+	var err error
+	for n := 0; n < b.N; n++ {
+		// always record the result of Fib to prevent
+		// the compiler eliminating the function call.
+		data, err = csvplus.Marshal(&items)
+		if err != nil {
+			panic(err)
+		}
+	}
+	// always store the result to a package level variable
+	// so the compiler cannot eliminate the Benchmark itself.
+	benchData = data
 }
 
 func TestUnmarshal(t *testing.T) { // nolint: gocyclo
@@ -489,8 +551,8 @@ func TestUnmarshal(t *testing.T) { // nolint: gocyclo
 
 		t.Run("skipped field -", func(t *testing.T) {
 			type Item struct {
-				First  string
-				Second int `csvplus:"-"`
+				First  string `csvplus:"-"`
+				Second int
 			}
 			data := []byte("First,Second\na,1\nb,2")
 			var items []Item
@@ -501,11 +563,11 @@ func TestUnmarshal(t *testing.T) { // nolint: gocyclo
 			if len(items) != 2 {
 				t.Errorf("expected len of %d, got: %d", 2, len(items))
 			}
-			if items[0].Second != 0 {
-				t.Errorf("expected 2, got: %d", items[0].Second)
+			if items[0].First != "" {
+				t.Errorf("expected empty string, got: %s", items[0].First)
 			}
-			if items[1].Second != 0 {
-				t.Errorf("expected 2, got: %d", items[1].Second)
+			if items[1].First != "" {
+				t.Errorf("expected empty string, got: %s", items[1].First)
 			}
 		})
 	})
@@ -533,6 +595,87 @@ func TestUnmarshal(t *testing.T) { // nolint: gocyclo
 				t.Errorf("expected 2, got: %d", items[1].First)
 			}
 		})
+	})
+}
+
+func TestUnmarshalWithoutHeader(t *testing.T) { // nolint: gocyclo
+	t.Run("works", func(t *testing.T) {
+		type Item struct {
+			First  string `csvplus:"-"`
+			Second int
+			Third  bool
+		}
+
+		data := []byte("1,true\n2,false")
+		var items []Item
+		err := csvplus.UnmarshalWithoutHeader(data, &items)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(items) != 2 {
+			t.Error()
+		}
+		if items[0].First != "" {
+			t.Errorf("expected empty string, got: %v", items[0].First)
+		}
+		if items[0].Second != 1 {
+			t.Errorf("expected 1, got: %v", items[0].First)
+		}
+		if items[0].Third != true {
+			t.Errorf("expected true, got: %v", items[1].First)
+		}
+		if items[1].First != "" {
+			t.Errorf("expected empty string, got: %v", items[1].First)
+		}
+		if items[1].Second != 2 {
+			t.Errorf("expected 2, got: %v", items[1].First)
+		}
+		if items[1].Third != false {
+			t.Errorf("expected false, got: %v", items[1].First)
+		}
+	})
+
+	t.Run("extra fields in data are ignored", func(t *testing.T) {
+		type Item struct {
+			First  string
+			Second int
+		}
+
+		data := []byte("foo,1,true\nbar,2,false\n")
+		var items []Item
+		err := csvplus.UnmarshalWithoutHeader(data, &items)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(items) != 2 {
+			t.Error()
+		}
+		if items[0].First != "foo" {
+			t.Errorf("expected empty string, got: %v", items[0].First)
+		}
+		if items[0].Second != 1 {
+			t.Errorf("expected 1, got: %v", items[0].First)
+		}
+		if items[1].First != "bar" {
+			t.Errorf("expected empty string, got: %v", items[1].First)
+		}
+		if items[1].Second != 2 {
+			t.Errorf("expected 2, got: %v", items[1].First)
+		}
+	})
+	t.Run("extra fields in struct", func(t *testing.T) {
+		type Item struct {
+			First  string
+			Second int
+			Third  bool
+		}
+
+		data := []byte("foo,1\nbar,2\n")
+		var items []Item
+		err := csvplus.UnmarshalWithoutHeader(data, &items)
+		if err == nil {
+			t.Fatal("expected not enough columns in csv data error")
+		}
 	})
 }
 
@@ -594,4 +737,256 @@ func ExampleDecoder_SetCSVReader() {
 	// Output:
 	// {Rob 1999-11-01 00:00:00 +0000 UTC}
 	// {Russ <nil>}
+}
+
+func TestMarshal(t *testing.T) { // nolint: gocyclo
+	t.Run("no tags", func(t *testing.T) {
+		type Item struct {
+			First  string
+			Second int
+		}
+		items := []Item{
+			{
+				"a",
+				1,
+			},
+			{
+				"b",
+				2,
+			},
+		}
+		data, err := csvplus.Marshal(&items)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expectedData := []byte("First,Second\na,1\nb,2\n")
+		if string(data) != string(expectedData) {
+			t.Errorf("expected: %s, got: %s", expectedData, data)
+		}
+	})
+
+	t.Run("col tags work", func(t *testing.T) {
+		type Item struct {
+			First  string `csvplus:"first"`
+			Second int    `csvplus:"second"`
+		}
+		items := []Item{
+			{
+				"a",
+				1,
+			},
+			{
+				"b",
+				2,
+			},
+		}
+		data, err := csvplus.Marshal(&items)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expectedData := []byte("first,second\na,1\nb,2\n")
+		if string(data) != string(expectedData) {
+			t.Errorf("expected: %s, got: %s", expectedData, data)
+		}
+	})
+
+	t.Run("skip field", func(t *testing.T) {
+		type Item struct {
+			First  string `csvplus:"-"`
+			Second int    `csvplus:"second"`
+		}
+		items := []Item{
+			{
+				"a",
+				1,
+			},
+			{
+				"b",
+				2,
+			},
+		}
+		data, err := csvplus.Marshal(&items)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expectedData := []byte("second\n1\n2\n")
+		if string(data) != string(expectedData) {
+			t.Errorf("expected: %s, got: %s", expectedData, data)
+		}
+	})
+
+	t.Run("time.Time format", func(t *testing.T) {
+		type Item struct {
+			First time.Time `csvplusFormat:"2006-01"`
+		}
+
+		tm, _ := time.Parse("2006-01", "2010-01")
+
+		items := []Item{
+			{
+				tm,
+			},
+		}
+		data, err := csvplus.Marshal(&items)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expectedData := []byte("First\n2010-01\n")
+		if string(data) != string(expectedData) {
+			t.Errorf("expected: %s, got: %s", expectedData, data)
+		}
+	})
+
+	t.Run("pointer field", func(t *testing.T) {
+		type Item struct {
+			First *bool
+		}
+
+		yes := true
+		items := []Item{
+			{
+				&yes,
+			},
+			{},
+		}
+		data, err := csvplus.Marshal(&items)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expectedData := []byte("First\ntrue\n\n")
+		if string(data) != string(expectedData) {
+			t.Errorf("expected: %s, got: %s", expectedData, data)
+		}
+	})
+
+	t.Run("uint", func(t *testing.T) {
+		type Item struct {
+			First uint
+		}
+
+		items := []Item{
+			{
+				10,
+			},
+			{},
+		}
+		data, err := csvplus.Marshal(&items)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expectedData := []byte("First\n10\n0\n")
+		if string(data) != string(expectedData) {
+			t.Errorf("expected: %s, got: %s", expectedData, data)
+		}
+	})
+
+	t.Run("float", func(t *testing.T) {
+		type Item struct {
+			First float64
+		}
+
+		items := []Item{
+			{
+				10.05,
+			},
+			{},
+		}
+		data, err := csvplus.Marshal(&items)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expectedData := []byte("First\n10.05\n0\n")
+		if string(data) != string(expectedData) {
+			t.Errorf("expected: %s, got: %s", expectedData, data)
+		}
+	})
+
+	t.Run("MarshalCSV", func(t *testing.T) {
+		type Item struct {
+			First *YesNoBool
+		}
+
+		yes := YesNoBool(true)
+		items := []Item{
+			{
+				&yes,
+			},
+			{},
+		}
+		data, err := csvplus.Marshal(&items)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expectedData := []byte("First\nyes\nno\n")
+		if string(data) != string(expectedData) {
+			t.Errorf("expected: %s, got: %s", expectedData, data)
+		}
+	})
+
+	t.Run("string pointer fails", func(t *testing.T) {
+		a := "not a pointer to a slice"
+		_, err := csvplus.Marshal(&a)
+		if err == nil {
+			t.Error("expected error")
+		}
+		expectedPrefix := "expected slice"
+		if !strings.HasPrefix(err.Error(), expectedPrefix) {
+			t.Errorf("wrong error prefix, expected: '%s', got: %s", expectedPrefix, err.Error())
+		}
+	})
+
+	t.Run("slice value fails", func(t *testing.T) {
+		var items []string
+		_, err := csvplus.Marshal(items)
+		if err == nil {
+			t.Error("expected error")
+		}
+		expectedPrefix := "non pointer"
+		if !strings.HasPrefix(err.Error(), expectedPrefix) {
+			t.Errorf("wrong error prefix, expected: '%s', got: %s", expectedPrefix, err.Error())
+		}
+	})
+}
+
+func TestMarshalReader(t *testing.T) {
+	type Item struct {
+		First  string
+		Second int
+	}
+	items := []Item{
+		{"a", 1},
+		{"b", 2},
+	}
+	var buf bytes.Buffer
+	err := csvplus.MarshalWriter(&items, &buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedData := "First,Second\na,1\nb,2\n"
+
+	if expectedData != buf.String() {
+		t.Errorf("incorrect output, expected: %s, got: %s", expectedData, buf.String())
+	}
+}
+
+func TestMarshalWithoutHeader(t *testing.T) {
+	type Item struct {
+		First  string `csvplus:"-"`
+		Second int
+		Third  bool
+	}
+	items := []Item{
+		{"a", 1, true},
+		{"b", 2, false},
+	}
+
+	data, err := csvplus.MarshalWithoutHeader(&items)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedData := "1,true\n2,false\n"
+	if string(data) != expectedData {
+		t.Errorf("incorrect output, expected: %s, got: %s", expectedData, data)
+	}
 }

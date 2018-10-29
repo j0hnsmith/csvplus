@@ -1,18 +1,12 @@
-# CSVPlus
+# csvplus
 
-CSVPlus provides marshalling/unmarshalling* of CSV data (with header rows) into go structs.
+[![GoDoc](https://godoc.org/github.com/j0hnsmith/csvplus?status.svg)](https://godoc.org/github.com/j0hnsmith/csvplus)
 
-* marshalling on todo list
+csvplus provides marshalling/unmarshalling of CSV data (with and without header rows) into slices of structs.
 
 ## Why?
 
-`csv.NewReader().Read()` only provides records as `[]string` leaving the user to perform type conversion.
-
-## TODO
-
-* [ ] add support for marshalling
-* [x] expose `csv.Reader` config
-* [x] consider using struct tags to map CSV colums to struct fields
+`csv.NewReader().Read()` only provides records as `[]string` leaving the user to perform type conversion. Also more convenient to go to/from a slice, don't have .
 
 ## Examples
 Unmarshal
@@ -45,10 +39,10 @@ fmt.Printf("{First:%s Second:%d Third:%t (dereferenced) Forth:%s}\n", items[1].F
 Custom field unmarshalling
 ```go
 
-// YesNoBool is an example field that implements Unmarhsaler, it's used in an example.
+// YesNoBool is an example field that implements Unmarshaler, it's used in an example.
 type YesNoBool bool
 
-// UnmarshalCSV is an implementation of the Unmarshaller interface, converts a string record to a native
+// UnmarshalCSV is an implementation of the Unmarshaler interface, converts a string record to a native
 // value for this type.
 func (ynb *YesNoBool) UnmarshalCSV(s string) error {
     if ynb == nil {
@@ -85,3 +79,42 @@ for _, item := range items {
     fmt.Println(item)
 }
 ```
+
+Marshal
+
+```go
+type Item struct {
+    First  string     `csvplus:"first"`
+    Second int        `csvplus:"second"`
+    Third  *bool      `csvplus:"third"`
+    Fourth *time.Time `csvplus:"fourth" csvplusFormat:"2006-01"`
+}
+
+tm, _ := time.Parse("2006-01", "2000-01")
+f := false
+items := []Item{
+    {"a", 1, nil, &tm},
+    {"b", 2, &f, nil},
+}
+data, err := csvplus.Marshal(&items)
+if err != nil {
+    panic(err)
+}
+
+fmt.Println(string(data))
+// Output:
+// first,second,third,fourth
+// a,1,,2000-01
+// b,2,false,
+```
+
+## Ideas for improvement
+* `csvplusNilVal` tag for custom nil values (eg '-', 'n/a')
+* `csvplusTrueVal` & `csvplusFalseVal` (eg 'yes' and 'no' without custom types that implement `Marshaler`/`Unmarshaler` interfaces)
+* `csvplusFormat` to also handle floats via string formatting (eg `%.3e`)
+
+PRs welcome.
+
+# Docs
+
+https://godoc.org/github.com/j0hnsmith/csvplus
