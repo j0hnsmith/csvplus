@@ -901,7 +901,7 @@ func TestMarshal(t *testing.T) { // nolint: gocyclo
 		}
 	})
 
-	t.Run("MarshalCSV", func(t *testing.T) {
+	t.Run("MarshalCSV pointer", func(t *testing.T) {
 		type Item struct {
 			First *YesNoBool
 		}
@@ -912,6 +912,27 @@ func TestMarshal(t *testing.T) { // nolint: gocyclo
 				&yes,
 			},
 			{},
+		}
+		data, err := csvplus.Marshal(&items)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expectedData := []byte("First\nyes\nno\n")
+		if string(data) != string(expectedData) {
+			t.Errorf("expected: %s, got: %s", expectedData, data)
+		}
+	})
+
+	t.Run("MarshalCSV non pointer", func(t *testing.T) {
+		type Item struct {
+			First YesNoBool
+		}
+
+		yes := YesNoBool(true)
+		no := YesNoBool(false)
+		items := []Item{
+			{yes},
+			{no},
 		}
 		data, err := csvplus.Marshal(&items)
 		if err != nil {

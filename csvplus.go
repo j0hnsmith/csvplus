@@ -304,9 +304,14 @@ func (enc *Encoder) Encode(v interface{}) error { // nolint: gocyclo
 		for _, fieldIndex := range enc.encRegister.GetEncodeIndices(st) {
 			fv := sv.Field(fieldIndex)
 
+			var m Marshaler
 			if fv.Type().Implements(csvMarshalerType) {
-				u := fv.Interface().(Marshaler)
-				b, err := u.MarshalCSV()
+				m = fv.Interface().(Marshaler)
+			} else if reflect.PtrTo(fv.Type()).Implements(csvMarshalerType) {
+				m = fv.Addr().Interface().(Marshaler)
+			}
+			if m != nil {
+				b, err := m.MarshalCSV()
 				if err != nil {
 					return err
 				}
