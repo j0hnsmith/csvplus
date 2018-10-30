@@ -359,9 +359,5 @@ func (enc *Encoder) Encode(v interface{}) error { // nolint: gocyclo
 	}
 
 	enc.csvWriter.Flush()
-	if err := enc.csvWriter.Error(); err != nil {
-		return err
-	}
-
-	return nil
+	return enc.csvWriter.Error()
 }
