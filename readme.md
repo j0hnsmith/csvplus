@@ -6,7 +6,7 @@ csvplus provides marshalling/unmarshalling of CSV data (with and without header 
 
 ## Why?
 
-`csv.NewReader().Read()` only provides records as `[]string` leaving the user to perform type conversion. Also more convenient to go to/from a slice, don't have .
+`csv.NewReader().Read()` only provides records as `[]string` leaving the user to perform type conversion. Also more convenient to go to/from a slice.
 
 ## Examples
 Unmarshal
