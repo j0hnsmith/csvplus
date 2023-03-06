@@ -82,6 +82,7 @@ func (dec *Decoder) Decode(v interface{}) error {
 	structType := rt.Elem().Elem()
 	var fis []fieldInfo
 
+	var row int
 	for {
 		record, err := dec.csvReader.Read()
 		if err == io.EOF {
@@ -95,24 +96,26 @@ func (dec *Decoder) Decode(v interface{}) error {
 			fis = getFieldInfo(structType, dec.withoutHeader, record)
 			dec.headerPassed = true
 			if !dec.withoutHeader {
+				row++
 				continue
 			}
 		}
 
 		structPZeroValue := reflect.New(structType)
 
-		if err := dec.unmarshalRecord(record, structPZeroValue.Interface(), fis); err != nil {
+		if err := dec.unmarshalRecord(row, record, structPZeroValue.Interface(), fis); err != nil {
 			return err
 		}
 
 		containerValue.Set(reflect.Append(containerValue, structPZeroValue.Elem()))
+		row++
 	}
 
 	return nil
 }
 
 // unmarshalRecord sets the values from a single CSV record to the (exported) fields of the struct v.
-func (dec *Decoder) unmarshalRecord(record []string, v interface{}, fis []fieldInfo) error { // nolint: gocyclo
+func (dec *Decoder) unmarshalRecord(row int, record []string, v interface{}, fis []fieldInfo) error { // nolint: gocyclo
 	rv := reflect.ValueOf(v)
 	s := rv.Elem()
 
@@ -122,7 +125,7 @@ func (dec *Decoder) unmarshalRecord(record []string, v interface{}, fis []fieldI
 		}
 
 		if (len(record) - 1) < fi.ColIndex {
-			return errors.Errorf("not enough columns in csv data")
+			return errors.Errorf("not enough columns in csv data (row %d)", row)
 		}
 
 		recVal := record[fi.ColIndex]
@@ -139,7 +142,7 @@ func (dec *Decoder) unmarshalRecord(record []string, v interface{}, fis []fieldI
 			uc := p.Interface().(Unmarshaler)
 			err := uc.UnmarshalCSV(recVal)
 			if err != nil {
-				return errors.Wrapf(err, "error calling %s.UnmarshalCSV()", fi.Name)
+				return errors.Wrapf(err, "error calling %s.UnmarshalCSV() (row %d)", fi.Name, row)
 			}
 			f.Set(reflect.ValueOf(uc))
 			continue
@@ -150,7 +153,7 @@ func (dec *Decoder) unmarshalRecord(record []string, v interface{}, fis []fieldI
 			uc := p.Interface().(Unmarshaler)
 			err := uc.UnmarshalCSV(recVal)
 			if err != nil {
-				return errors.Wrapf(err, "error calling %s.UnmarshalCSV()", fi.Name)
+				return errors.Wrapf(err, "error calling %s.UnmarshalCSV() (row %d)", fi.Name, row)
 			}
 			f.Set(reflect.ValueOf(uc).Elem())
 			continue
@@ -171,32 +174,32 @@ func (dec *Decoder) unmarshalRecord(record []string, v interface{}, fis []fieldI
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			ival, err := strconv.ParseInt(recVal, 10, 64)
 			if err != nil || f.OverflowInt(ival) {
-				return errors.Wrapf(err, "unable to convert %s to int in field %s", recVal, fi.Name)
+				return errors.Wrapf(err, "unable to convert %s to int in field %s (row %d)", recVal, fi.Name, row)
 			}
 			f.SetInt(ival)
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 			ival, err := strconv.ParseUint(recVal, 10, 64)
 			if err != nil || f.OverflowUint(ival) {
-				return errors.Wrapf(err, "unable to convert %s to uint in field %s", recVal, fi.Name)
+				return errors.Wrapf(err, "unable to convert %s to uint in field %s (row %d)", recVal, fi.Name, row)
 			}
 			f.SetUint(ival)
 		case reflect.Float32, reflect.Float64:
 			fval, err := strconv.ParseFloat(recVal, 64)
 			if err != nil || f.OverflowFloat(fval) {
-				return errors.Wrapf(err, "unable to convert %s to float in field %s", recVal, fi.Name)
+				return errors.Wrapf(err, "unable to convert %s to float in field %s (row %d)", recVal, fi.Name, row)
 			}
 			f.SetFloat(fval)
 		case reflect.Bool:
 			bval, err := strconv.ParseBool(recVal)
 			if err != nil {
-				return errors.Wrapf(err, "unable to convert %s to bool in field %s", recVal, fi.Name)
+				return errors.Wrapf(err, "unable to convert %s to bool in field %s (row %d)", recVal, fi.Name, row)
 			}
 			f.SetBool(bval)
 		case reflect.Struct:
 			if f.Type().String() == timeType {
 				d, err := time.Parse(fi.Format, recVal)
 				if err != nil {
-					return errors.Wrapf(err, "invalid layout format for field %s", fi.Name)
+					return errors.Wrapf(err, "invalid layout format for field %s (row %d)", fi.Name, row)
 				}
 				f.Set(reflect.ValueOf(d))
 				break
@@ -204,7 +207,7 @@ func (dec *Decoder) unmarshalRecord(record []string, v interface{}, fis []fieldI
 			fallthrough
 
 		default:
-			return fmt.Errorf("unsupported type for %s: %s", fi.Name, f.Type().String())
+			return fmt.Errorf("unsupported type for %s: %s (row %d)", fi.Name, f.Type().String(), row)
 		}
 	}
 
