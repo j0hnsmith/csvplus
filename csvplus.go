@@ -142,7 +142,7 @@ func (dec *Decoder) unmarshalRecord(row int, record []string, v interface{}, fis
 			uc := p.Interface().(Unmarshaler)
 			err := uc.UnmarshalCSV(recVal)
 			if err != nil {
-				return errors.Wrapf(err, "error calling %s.UnmarshalCSV() (row %d)", fi.Name, row)
+				return newUnmarshalError(fi.ColName, fi.ColIndex, row, recVal, errors.Wrapf(err, "%s.UnmarshalCSV()", fi.Name))
 			}
 			f.Set(reflect.ValueOf(uc))
 			continue
@@ -153,7 +153,7 @@ func (dec *Decoder) unmarshalRecord(row int, record []string, v interface{}, fis
 			uc := p.Interface().(Unmarshaler)
 			err := uc.UnmarshalCSV(recVal)
 			if err != nil {
-				return errors.Wrapf(err, "error calling %s.UnmarshalCSV() (row %d)", fi.Name, row)
+				return newUnmarshalError(fi.ColName, fi.ColIndex, row, recVal, errors.Wrapf(err, "%s.UnmarshalCSV()", fi.Name))
 			}
 			f.Set(reflect.ValueOf(uc).Elem())
 			continue
@@ -174,32 +174,32 @@ func (dec *Decoder) unmarshalRecord(row int, record []string, v interface{}, fis
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			ival, err := strconv.ParseInt(recVal, 10, 64)
 			if err != nil || f.OverflowInt(ival) {
-				return errors.Wrapf(err, "unable to convert %s to int in field %s (row %d)", recVal, fi.Name, row)
+				return newUnmarshalError(fi.ColName, fi.ColIndex, row, recVal, errors.Wrapf(err, "strconv.ParseInt"))
 			}
 			f.SetInt(ival)
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 			ival, err := strconv.ParseUint(recVal, 10, 64)
 			if err != nil || f.OverflowUint(ival) {
-				return errors.Wrapf(err, "unable to convert %s to uint in field %s (row %d)", recVal, fi.Name, row)
+				return newUnmarshalError(fi.ColName, fi.ColIndex, row, recVal, errors.Wrapf(err, "strconv.ParseUint"))
 			}
 			f.SetUint(ival)
 		case reflect.Float32, reflect.Float64:
 			fval, err := strconv.ParseFloat(recVal, 64)
 			if err != nil || f.OverflowFloat(fval) {
-				return errors.Wrapf(err, "unable to convert %s to float in field %s (row %d)", recVal, fi.Name, row)
+				return newUnmarshalError(fi.ColName, fi.ColIndex, row, recVal, errors.Wrapf(err, "strconv.ParseFloat"))
 			}
 			f.SetFloat(fval)
 		case reflect.Bool:
 			bval, err := strconv.ParseBool(recVal)
 			if err != nil {
-				return errors.Wrapf(err, "unable to convert %s to bool in field %s (row %d)", recVal, fi.Name, row)
+				return newUnmarshalError(fi.ColName, fi.ColIndex, row, recVal, errors.Wrapf(err, "strconv.ParseBool"))
 			}
 			f.SetBool(bval)
 		case reflect.Struct:
 			if f.Type().String() == timeType {
 				d, err := time.Parse(fi.Format, recVal)
 				if err != nil {
-					return errors.Wrapf(err, "invalid layout format for field %s (row %d)", fi.Name, row)
+					return newUnmarshalError(fi.ColName, fi.ColIndex, row, recVal, errors.Wrapf(err, "time.Parse %s", fi.Format))
 				}
 				f.Set(reflect.ValueOf(d))
 				break
@@ -207,7 +207,7 @@ func (dec *Decoder) unmarshalRecord(row int, record []string, v interface{}, fis
 			fallthrough
 
 		default:
-			return fmt.Errorf("unsupported type for %s: %s (row %d)", fi.Name, f.Type().String(), row)
+			return newUnmarshalError(fi.ColName, fi.ColIndex, row, recVal, fmt.Errorf("unsupported type %s", f.Type().String()))
 		}
 	}
 
@@ -368,4 +368,28 @@ func (enc *Encoder) Encode(v interface{}) error { // nolint: gocyclo
 
 	enc.csvWriter.Flush()
 	return enc.csvWriter.Error()
+}
+
+type UnmarhsalError struct {
+	Column string
+	Row    int
+	Value  string
+	RawErr error
+}
+
+func newUnmarshalError(colName string, colIndex, row int, value string, err error) UnmarhsalError {
+	if colName == "" {
+		// no header row, we only have index
+		colName = fmt.Sprintf("col idx %d", colIndex)
+	}
+	return UnmarhsalError{
+		Column: colName,
+		Row:    row,
+		Value:  value,
+		RawErr: err,
+	}
+}
+
+func (um UnmarhsalError) Error() string {
+	return fmt.Sprintf("col: %s, row: %d, val: %s, err: %s", um.Column, um.Row, um.Value, um.RawErr.Error())
 }

@@ -262,13 +262,13 @@ func TestUnmarshal(t *testing.T) { // nolint: gocyclo
 			type Item struct {
 				First uint
 			}
-			data := []byte("First\n-7")
+			data := []byte("First\nnot uint")
 
 			var items []Item
 			err := csvplus.Unmarshal(data, &items)
-			expectedPrefix := "unable to convert -7 to uint in field First"
-			if !strings.HasPrefix(err.Error(), expectedPrefix) {
-				t.Errorf("wrong error, expected: '%s', got: %s", expectedPrefix, err.Error())
+			expectedContent := "parsing \"not uint\": invalid syntax"
+			if !strings.Contains(err.Error(), expectedContent) {
+				t.Errorf("wrong error, expected: '%s', got: %s", expectedContent, err.Error())
 			}
 		})
 
@@ -276,13 +276,13 @@ func TestUnmarshal(t *testing.T) { // nolint: gocyclo
 			type Item struct {
 				First int
 			}
-			data := []byte("First\nfoo")
+			data := []byte("First\nnot int")
 
 			var items []Item
 			err := csvplus.Unmarshal(data, &items)
-			expectedPrefix := "unable to convert foo to int in field First"
-			if !strings.HasPrefix(err.Error(), expectedPrefix) {
-				t.Errorf("wrong error, expected: '%s'", expectedPrefix)
+			expectedContent := "parsing \"not int\": invalid syntax"
+			if !strings.Contains(err.Error(), expectedContent) {
+				t.Errorf("wrong error, got: '%s', expected: '%s'", err.Error(), expectedContent)
 			}
 		})
 
@@ -290,13 +290,13 @@ func TestUnmarshal(t *testing.T) { // nolint: gocyclo
 			type Item struct {
 				First float32
 			}
-			data := []byte("First\nfoo")
+			data := []byte("First\nnot float32")
 
 			var items []Item
 			err := csvplus.Unmarshal(data, &items)
-			expectedPrefix := "unable to convert foo to float in field First"
-			if !strings.HasPrefix(err.Error(), expectedPrefix) {
-				t.Errorf("wrong error, expected: '%s', got: %s", expectedPrefix, err.Error())
+			expectedContent := "parsing \"not float32\": invalid syntax"
+			if !strings.Contains(err.Error(), expectedContent) {
+				t.Errorf("wrong error, expected: '%s', got: %s", expectedContent, err.Error())
 			}
 		})
 
@@ -344,13 +344,13 @@ func TestUnmarshal(t *testing.T) { // nolint: gocyclo
 			type Item struct {
 				First bool
 			}
-			data := []byte("First\nfoo")
+			data := []byte("First\nnot bool")
 
 			var items []Item
 			err := csvplus.Unmarshal(data, &items)
-			expectedPrefix := "unable to convert foo to bool in field First"
-			if !strings.HasPrefix(err.Error(), expectedPrefix) {
-				t.Errorf("wrong error, expected: '%s', got: %s", expectedPrefix, err.Error())
+			expectedContent := "parsing \"not bool\": invalid syntax"
+			if !strings.Contains(err.Error(), expectedContent) {
+				t.Errorf("wrong error, expected: '%s', got: %s", expectedContent, err.Error())
 			}
 		})
 
@@ -442,9 +442,9 @@ func TestUnmarshal(t *testing.T) { // nolint: gocyclo
 				data := []byte(fmt.Sprintf("First\n%s", dts))
 				var items []Item
 				err := csvplus.Unmarshal(data, &items)
-				expectedPrefix := "invalid layout format for field First"
-				if !strings.HasPrefix(err.Error(), expectedPrefix) {
-					t.Errorf("wrong error prefix, expected: '%s', got: %s", expectedPrefix, err.Error())
+				expectedContent := "cannot parse \"2023-03\" as \"invalid format\""
+				if !strings.Contains(err.Error(), expectedContent) {
+					t.Errorf("wrong error prefix, expected: '%s', got: %s", expectedContent, err.Error())
 				}
 			})
 		})
