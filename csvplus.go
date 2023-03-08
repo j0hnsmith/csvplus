@@ -129,11 +129,6 @@ func (dec *Decoder) unmarshalRecord(row int, record []string, v interface{}, fis
 		}
 
 		recVal := record[fi.ColIndex]
-		if recVal == "" {
-			// no data to store in field
-			continue
-		}
-
 		f := s.FieldByName(fi.Name)
 
 		// if field implements csvplus.Unmarshaler use that
@@ -156,6 +151,11 @@ func (dec *Decoder) unmarshalRecord(row int, record []string, v interface{}, fis
 				return newUnmarshalError(fi.ColName, fi.ColIndex, row, recVal, errors.Wrapf(err, "%s.UnmarshalCSV()", fi.Name))
 			}
 			f.Set(reflect.ValueOf(uc).Elem())
+			continue
+		}
+
+		if recVal == "" {
+			// no data to store in field
 			continue
 		}
 

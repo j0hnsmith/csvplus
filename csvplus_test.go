@@ -82,6 +82,9 @@ func (ynb *YesNoBool) UnmarshalCSV(s string) error {
 	case "no":
 		*ynb = YesNoBool(false)
 		return nil
+	case "":
+		*ynb = YesNoBool(false)
+		return nil
 	}
 	return fmt.Errorf("unable to convert %s to bool", s)
 }
@@ -107,6 +110,9 @@ func ExampleUnmarshaler() {
 	// 		case "no":
 	// 			*ynb = YesNoBool(false)
 	// 			return nil
+	//		case "":
+	//			*ynb = YesNoBool(false) // custom zero value
+	//			return nil
 	// 		}
 	// 			return fmt.Errorf("unable to convert %s to bool", s)
 	// 		}
@@ -114,7 +120,7 @@ func ExampleUnmarshaler() {
 	type Item struct {
 		Name      string     `csvplus:"name"`
 		Seen      *YesNoBool `csvplus:"seen"`   // custom type that implements Unmarshaler
-		Agreed    YesNoBool  `csvplus:"agreed"` // custom type that implements Unmarshaler
+		Agreed    *YesNoBool `csvplus:"agreed"` // custom type that implements Unmarshaler
 		Timestamp *time.Time `csvplus:"when" csvplusFormat:"2006-01"`
 	}
 
@@ -127,11 +133,11 @@ func ExampleUnmarshaler() {
 		panic(err)
 	}
 
-	fmt.Printf("{%s %t (dereferenced) %t %s}\n", items[0].Name, *items[0].Seen, items[0].Agreed, items[0].Timestamp)
-	fmt.Printf("{%s %+v %t %+v}\n", items[1].Name, items[1].Seen, items[1].Agreed, items[1].Timestamp)
+	fmt.Printf("{%s %t (dereferenced) %t %s}\n", items[0].Name, *items[0].Seen, *items[0].Agreed, items[0].Timestamp)
+	fmt.Printf("{%s %+v %t %+v}\n", items[1].Name, *items[1].Seen, *items[1].Agreed, items[1].Timestamp)
 	// Output:
 	// {Rob true (dereferenced) true 1999-11-01 00:00:00 +0000 UTC}
-	// {Russ <nil> false <nil>}
+	// {Russ false false <nil>}
 }
 
 func ExampleMarshal() {
